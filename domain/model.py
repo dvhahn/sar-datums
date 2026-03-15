@@ -15,13 +15,13 @@ class Coordinate:
     def lat(self, value: float):
         if not -90 <= value <= 90:
             raise ValueError("Latitude must be between -90 and 90 degrees")
-        self.lat = value
+        self._lat = value
 
     @lon.setter
     def lon(self, value: float):
         if not -180 <= value <= 180:
             raise ValueError("Longitude must be between -180 and 180 degrees")
-        self.lat = value
+        self._lon = value
 
     def __repr__(self):
         return f"Coordinate(lat={self.lat}, long={self.lon})"
@@ -50,7 +50,7 @@ class Wind:
     def direction_deg(self, value: float):
         if not 0 <= value < 360:
             raise ValueError("Direction must be between 0 and 360 degrees")
-        self.direction_deg = value
+        self._direction_deg = value
 
     def __repr__(self):
         return f"Wind(speed={self.speed}, direction_deg={self.direction_deg})"
