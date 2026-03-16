@@ -57,11 +57,11 @@ class Wind:
 
 
 class SearchObject:
-    def __init__(self, object_id: int, name: str, wind_factor: float):
+    def __init__(self, object_id: int, name: str, coefficient_a: float, coefficient_b: float):
         self._id = object_id
         self._name = name
-        self._coefficient_a = self.coefficient_a
-        self._coefficient_b = self.coefficient_b
+        self._coefficient_a = coefficient_a
+        self._coefficient_b = coefficient_b
 
     @property
     def id(self):
@@ -80,7 +80,7 @@ class SearchObject:
         return self._coefficient_b
 
     def __repr__(self):
-        return f"SearchObject(id={self.id}, name='{self._name}', wind_factor={self.wind_factor})"
+        return f"SearchObject(id={self.id}, name='{self._name}', a={self.coefficient_a}, b={self.coefficient_b})"
 
 class CurrentVector:
     def __init__(self, vx: float, vy: float):
