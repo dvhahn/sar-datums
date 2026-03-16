@@ -43,3 +43,7 @@ def apply_drift_step(position: Coordinate, current: CurrentVector, leeway: Curre
     new_lon = position.lon + ((dx / 111120) / math.cos(math.radians(position.lat)))
 
     return Coordinate(new_lat, new_lon)
+
+def calculate_drift() -> list[Coordinate]:
+    # TODO
+    pass
