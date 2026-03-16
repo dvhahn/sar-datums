@@ -60,16 +60,24 @@ class SearchObject:
     def __init__(self, object_id: int, name: str, wind_factor: float):
         self._id = object_id
         self._name = name
-        self._wind_factor = wind_factor
+        self._coefficient_a = self.coefficient_a
+        self._coefficient_b = self.coefficient_b
 
     @property
     def id(self):
         return self._id
 
-    # unsure how to implement yet
     @property
-    def wind_factor(self):
-        return self._wind_factor
+    def name(self):
+        return self._name
+
+    @property
+    def coefficient_a(self):
+        return self._coefficient_a
+    
+    @property
+    def coefficient_b(self):
+        return self._coefficient_b
 
     def __repr__(self):
         return f"SearchObject(id={self.id}, name='{self._name}', wind_factor={self.wind_factor})"
