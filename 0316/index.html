@@ -9,6 +9,7 @@
 </head>
 <body>
 
+    <div id="mainpage">
     <div class="app-window">
         <!-- 顶部横幅区 -->
         <div class="banner">
@@ -24,7 +25,7 @@
 
         <!-- 3D复古按钮组 -->
         <div class="btn-container">
-            <button class="retro-btn">SAR Datums</button>
+            <button class="retro-btn" onclick="openPopup()">SAR Datums</button>
             <button class="retro-btn">SAR Patterns</button>
             <button class="retro-btn">GPX Circles</button>
         </div>
@@ -37,6 +38,147 @@
             
         </div>
     </div>
+    </div>
 
+<div id="popupOverlay" class="overlay">
+
+<div class="modal">
+
+<div class="modal-header">
+    <span>Vessel Adrift</span>
+    <button class="close-btn" onclick="closePopup()">✕</button>
+</div>
+
+<!-- POSITION INFO -->
+<div class="section-grid">
+
+<label>Latitude</label>
+<button onclick="openLatLonPopup('lat')" id="latBtn">00° 00.000' N</button>
+
+<label>LKP Time</label>
+<input value="0000 hr; 14 Feb 26">
+
+<button class="small-btn">Clear Data</button>
+
+<label>Longitude</label>
+<button onclick="openLatLonPopup('lon')" id="lonBtn">00° 00.000' N</button>
+
+<label>Arrival Time</label>
+<input value="0000 hr; 16 Feb 26">
+
+<div></div>
+
+<label>Wind</label>
+<input>
+
+<label></label>
+<label class="checkbox">
+<input type="checkbox" checked>
+Use Downloaded Wind Data
+</label>
+
+</div>
+
+<p class="tide">
+High Tide at Auckland is at 0000 hr on 14 Feb 26
+</p>
+
+<!-- OBJECT -->
+<div class="object-row">
+<label>Object</label>
+<!-- JUST A PLACEHOLDER FOR NOW (NEED TO MAKE IT FUNCTIONAL)-->
+<input value="Unknown PIW">
+</div>
+
+<!-- OPTIONS -->
+<div class="checkbox-group">
+
+<label><input type="checkbox"> Reverse Track Drift</label>
+<label><input type="checkbox"> Time Uncertain</label>
+<label><input type="checkbox"> Add Divergence Angle of 30°</label>
+
+</div>
+
+<p class="note">
+Remember wind direction is the direction the wind is coming from
+</p>
+
+<!-- WIND BUTTONS -->
+<div class="top-buttons">
+<button>Download File</button>
+<button>Clear All Wind Data</button>
+</div>
+
+<!-- WIND TABLE -->
+<div class="wind-section">
+
+<div class="table-container">
+
+<table>
+<thead>
+<tr>
+<th>Date / Time</th>
+<th>Direction (°T)</th>
+<th>Speed (knots)</th>
+</tr>
+</thead>
+
+<tbody id="tableBody">
+
+</tbody>
+
+</table>
+
+</div>
+
+<div class="side-buttons">
+<button onclick="addRow()">Add Row</button>
+<button onclick="modifyRow()">Modify</button>
+<button onclick="deleteRow()">Delete</button>
+</div>
+
+</div>
+
+</div>
+</div>
+<!-- Latitude/Longitude Popup -->
+<div id="latLonPopup" class="overlay">
+
+  <div class="modal small-modal">
+
+    <div class="modal-header">
+      <span>Enter Latitude and Longitude</span>
+      <button class="close-btn" onclick="closeLatLonPopup()">✕</button>
+    </div>
+
+    <div class="latlon-grid header">
+      <div></div>
+      <div>Degrees</div>
+      <div>Minutes</div>
+    </div>
+
+    <div class="latlon-grid">
+      <label>Latitude:</label>
+      <input id="latDeg" value="00">
+      <input id="latMin" value="00.000">
+
+      <label>Longitude:</label>
+      <input id="lonDeg" value="00">
+      <input id="lonMin" value="00.000">
+    </div>
+
+    <div class="radio-group">
+      <label><input type="radio" name="format"> Degrees</label>
+      <label><input type="radio" name="format" checked> Degrees Minutes</label>
+      <label><input type="radio" name="format"> Degrees Minutes Seconds</label>
+    </div>
+
+    <div class="latlon-footer">
+      <button class="done-btn" onclick="saveLatLon()">Done</button>
+    </div>
+
+  </div>
+</div>
+    <script src="script.js"></script>
 </body>
 </html>

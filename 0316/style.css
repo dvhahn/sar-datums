@@ -132,3 +132,185 @@
             background: #fff;
             box-shadow: 1px 1px 5px rgba(0,0,0,0.1);
         }
+/* Overlay */
+.overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.3);
+    justify-content:center;
+    align-items:center;
+}
+
+/* Popup */
+.modal{
+    width:900px;
+    background:white;
+    border:1px solid #aaa;
+    padding:20px 24px;
+    box-shadow:0 5px 20px rgba(0,0,0,0.25);
+}
+
+/* Header */
+.modal-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:18px;
+    margin-bottom:15px;
+}
+
+.close-btn{
+    border:none;
+    background:#d9534f;
+    color:white;
+    padding:4px 10px;
+    cursor:pointer;
+}
+
+/* Grid layout */
+.section-grid{
+    display:grid;
+    grid-template-columns:120px 220px 120px 220px auto;
+    gap:8px 12px;
+    align-items:center;
+}
+
+input{
+    padding:6px;
+}
+
+.small-btn{
+    padding:5px 10px;
+}
+
+/* Text */
+.tide{
+    color:#d00;
+    margin:10px 0;
+}
+
+.note{
+    margin:12px 0;
+}
+
+/* Object */
+.object-row{
+    display:grid;
+    grid-template-columns:120px 1fr;
+    margin-bottom:10px;
+}
+
+/* Checkboxes */
+.checkbox-group{
+    display:flex;
+    gap:25px;
+    margin-bottom:10px;
+}
+
+.checkbox{
+    display:flex;
+    align-items:center;
+    gap:5px;
+}
+
+/* Buttons */
+.top-buttons{
+    display:flex;
+    justify-content:space-between;
+    margin:12px 0;
+}
+
+/* Wind section */
+.wind-section{
+    display:flex;
+    gap:20px;
+}
+
+.table-container{
+    border:1px solid #999;
+    height:220px;
+    overflow-y:auto;
+}
+
+table{
+    border-collapse:collapse;
+    width:450px;
+}
+
+th,td{
+    border:1px solid #aaa;
+    padding:5px;
+    font-size:13px;
+}
+
+thead{
+    background:#e9e9e9;
+}
+
+/* Side buttons */
+.side-buttons{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+/* Smaller popup */
+.small-modal{
+    width:420px;
+    padding:20px;
+}
+
+/* Prevent overflow globally */
+.modal input{
+    max-width:100%;
+}
+
+/* Lat/Lon layout */
+.latlon-grid{
+    display:grid;
+    grid-template-columns: 100px 120px 120px;
+    gap:10px;
+    align-items:center;
+    margin-bottom:12px;
+}
+
+/* Header row */
+.latlon-grid.header{
+    font-weight:bold;
+    text-align:center;
+}
+
+/* Fix input sizing */
+.latlon-grid input{
+    width:100%;
+    box-sizing:border-box;
+}
+
+.latlon-grid label{
+    text-align:left;
+}
+
+.radio-group{
+    margin:15px 0;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+}
+
+.latlon-footer{
+    margin-top:10px;
+}
+
+.done-btn{
+    width:100px;
+    height:50px;
+}
+
+/* Make lat/lon buttons look like inputs */
+#latBtn, #lonBtn{
+    text-align:left;
+    background:white;
+    border:1px solid #aaa;
+    padding:6px;
+    width:100%;
+}
