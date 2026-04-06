@@ -33,6 +33,23 @@ CREATE INDEX idx_tidal_vectors_location ON tidal_vectors USING GIST (location);
 -- Composite index for filtering by tide type and time step
 CREATE INDEX idx_tidal_vectors_lookup ON tidal_vectors (tide_type, time_step);
 
+-- Index for fast vector lookup by exact coordinates
+CREATE INDEX idx_tidal_vectors_coords ON tidal_vectors (lat, lon, time_step);
+
+
+-- ============================================================
+-- Table 2: locations
+-- Unique grid points extracted from tidal_vectors.
+-- Used for fast nearest-neighbour spatial queries (207K rows
+-- instead of 52M rows in tidal_vectors).
+-- Populated after tidal_vectors is loaded:
+--   CREATE TABLE locations AS
+--   SELECT DISTINCT lat, lon, location FROM tidal_vectors;
+-- ============================================================
+
+-- NOTE: This table is created by parse_tidal_data.py after data import.
+-- Schema defined here for documentation purposes.
+
 
 -- ============================================================
 -- Table 2: tide_heights
@@ -80,3 +97,4 @@ INSERT INTO config (key, value) VALUES
     ('spring_ebb_tide_range', 2.729),  -- B33
     ('spring_flood_tide_range',2.768), -- B34
     ('msl', 1.93);                     -- B42: Mean Sea Level
+    
