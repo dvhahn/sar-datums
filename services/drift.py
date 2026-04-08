@@ -17,16 +17,22 @@ SPRING_FLOOD_STEPS = 62
 
 # DB connection settings
 DB_NAME = os.getenv("DB_NAME", "sar_datums")
-DB_USER = os.getenv("DB_USER", "")
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 
 
 def _get_db_connection():
-    """Create a database connection."""
-    conn_params = {"dbname": DB_NAME, "host": DB_HOST, "port": DB_PORT}
-    if DB_USER:
-        conn_params["user"] = DB_USER
+    # Connect to database
+    conn_params = {
+        "dbname": DB_NAME,
+        "host": DB_HOST,
+        "port": DB_PORT,
+        "user": DB_USER
+    }
+    if DB_PASSWORD:
+        conn_params["password"] = DB_PASSWORD
     return psycopg2.connect(**conn_params)
 
 

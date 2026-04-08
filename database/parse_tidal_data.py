@@ -27,7 +27,8 @@ from io import StringIO
 
 # --- Configuration ---
 DB_NAME = os.getenv("DB_NAME", "sar_datums")
-DB_USER = os.getenv("DB_USER", "")  # macOS brew default: current OS user
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 
@@ -69,9 +70,14 @@ def parse_and_insert(excel_path):
     print(f"Neap starts at col {NEAP_START_COL}, Spring starts at col {spring_start_col}")
 
     # Connect to database
-    conn_params = {"dbname": DB_NAME, "host": DB_HOST, "port": DB_PORT}
-    if DB_USER:
-        conn_params["user"] = DB_USER
+    conn_params = {
+        "dbname": DB_NAME,
+        "host": DB_HOST,
+        "port": DB_PORT,
+        "user": DB_USER
+    }
+    if DB_PASSWORD:
+        conn_params["password"] = DB_PASSWORD
     conn = psycopg2.connect(**conn_params)
     cur = conn.cursor()
 

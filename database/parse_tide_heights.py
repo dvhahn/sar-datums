@@ -22,7 +22,8 @@ import openpyxl
 from datetime import datetime
 
 DB_NAME = os.getenv("DB_NAME", "sar_datums")
-DB_USER = os.getenv("DB_USER", "")
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 
@@ -37,9 +38,15 @@ def parse_and_insert(excel_path):
     wb = openpyxl.load_workbook(excel_path, read_only=True, data_only=True)
     ws = wb['Data']
 
-    conn_params = {"dbname": DB_NAME, "host": DB_HOST, "port": DB_PORT}
-    if DB_USER:
-        conn_params["user"] = DB_USER
+    # Connect to database
+    conn_params = {
+        "dbname": DB_NAME,
+        "host": DB_HOST,
+        "port": DB_PORT,
+        "user": DB_USER
+    }
+    if DB_PASSWORD:
+        conn_params["password"] = DB_PASSWORD
     conn = psycopg2.connect(**conn_params)
     cur = conn.cursor()
 
