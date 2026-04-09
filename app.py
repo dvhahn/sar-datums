@@ -10,6 +10,11 @@ app = Flask(__name__)
 # Each object has wind drift coefficients (a, b)
 SEARCH_OBJECTS = {
     1: SearchObject(1, "Person in Water", 0.011, 0.07),
+    2: SearchObject(2, "PIW with PFD (Average)", 0.013, 0.07),
+    3: SearchObject(3, "Life Raft - No ballast, No canopy, No drogue", 0.057, 0.21),
+    4: SearchObject(4, "Person-Powered Craft - Surfboard w/ person", 0.02, 0),
+    5: SearchObject(5, "55-gallon Oil Drum", 0.014, 0)
+
     # TODO: Add more from Peter's data
 }
 
