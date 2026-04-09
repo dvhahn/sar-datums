@@ -3,40 +3,360 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Search and Rescue Datums</title>
-        <link rel="stylesheet" href="style.css">
-
+    <title>Search and Rescue Datums – Hauraki Gulf</title>
+    <meta name="description" content="High-definition SAR tidal drift datum calculator for the Hauraki Gulf region.">
+    <link rel="stylesheet" href="style.css">
+    <!-- Leaflet map -->
+    <link  rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 
-    <div class="app-window">
-        <!-- 顶部横幅区 -->
-        <div class="banner">
-            <div class="banner-title">Search and Rescue Datums</div>
-            <div class="banner-email">email: pci590@police.govt.nz</div>
-        </div>
+<div class="app-window">
 
-        <!-- 主标题区 -->
-        <div class="main-heading">
-            Hauraki Gulf Tidal Drift Datums.<br>
-            (High Definition)
-        </div>
-
-        <!-- 3D复古按钮组 -->
-        <div class="btn-container">
-            <button class="retro-btn">SAR Datums</button>
-            <button class="retro-btn">SAR Patterns</button>
-            <button class="retro-btn">GPX Circles</button>
-        </div>
-
-        <!-- 底部区（小字与地图占位图） -->
-        <div class="bottom-section">
-            <div class="version-text">
-                Version 8.0 (This copy will expire after the 01 Dec 2026.)
-            </div>
-            
-        </div>
+    <!-- ── Banner ── -->
+    <div class="banner">
+        <div class="banner-title">Search and Rescue Datums</div>
+        <div class="banner-email">email: pci590@police.govt.nz</div>
     </div>
 
+    <!-- ── Main heading ── -->
+    <div class="main-heading">
+        Hauraki Gulf Tidal Drift Datums.<br>(High Definition)
+    </div>
+
+    <!-- ── Top navigation buttons ── -->
+    <div class="btn-container">
+        <button class="retro-btn active-btn" id="btn-datums"   onclick="showSection('datums')">SAR Datums</button>
+        <button class="retro-btn"            id="btn-patterns" onclick="showSection('patterns')">SAR Patterns</button>
+        <button class="retro-btn"            id="btn-gpx"      onclick="showSection('gpx')">GPX Circles</button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════
+         SECTION A – SAR Datums (drift calculator)
+    ═════════════════════════════════════════════════ -->
+    <section id="section-datums" class="content-section">
+
+        <!-- Component A – Input Form -->
+        <div class="panel" id="panel-input">
+            <h2 class="panel-title">Drift Input Parameters</h2>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="inp-lat">Latitude (°)</label>
+                    <input id="inp-lat" type="number" step="0.000001" value="-36.8" placeholder="-36.8">
+                </div>
+                <div class="form-group">
+                    <label for="inp-lon">Longitude (°)</label>
+                    <input id="inp-lon" type="number" step="0.000001" value="174.8" placeholder="174.8">
+                </div>
+                <div class="form-group">
+                    <label for="inp-start">Start Time</label>
+                    <input id="inp-start" type="datetime-local" value="2025-03-15T10:00">
+                </div>
+                <div class="form-group">
+                    <label for="inp-end">End Time</label>
+                    <input id="inp-end" type="datetime-local" value="2025-03-15T13:00">
+                </div>
+                <div class="form-group">
+                    <label for="inp-wind-speed">Wind Speed (kts)</label>
+                    <input id="inp-wind-speed" type="number" min="0" max="200" value="15">
+                </div>
+                <div class="form-group">
+                    <label for="inp-wind-dir">Wind Direction (°)</label>
+                    <input id="inp-wind-dir" type="number" min="0" max="359" value="180"
+                           placeholder="0 = North, 180 = South">
+                </div>
+                <div class="form-group span-2">
+                    <label for="inp-object">Object Type</label>
+                    <select id="inp-object">
+                        <option value="1">1 – Person in Water</option>
+                        <option value="2">2 – Life Raft (no ballast)</option>
+                        <option value="3">3 – Disabled Motorboat</option>
+                        <option value="4">4 – Sailboat (hull down)</option>
+                        <option value="5">5 – Debris / Container</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button class="calc-btn" id="btn-calculate" onclick="calculateDrift()">
+                    <span class="btn-icon">⟳</span> Calculate Datum
+                </button>
+                <button class="clear-btn" onclick="resetForm()">Clear</button>
+            </div>
+
+            <!-- Error message -->
+            <div id="error-msg" class="error-box hidden"></div>
+        </div>
+
+        <!-- Component B – Results -->
+        <div class="panel" id="panel-results">
+            <h2 class="panel-title">Drift Results</h2>
+
+            <div id="results-placeholder" class="placeholder-text">
+                Fill in the parameters above and click <strong>Calculate Datum</strong>
+                to see the predicted drift position.
+            </div>
+
+            <div id="results-content" class="hidden">
+                <!-- Datum position card -->
+                <div class="result-card highlight-card">
+                    <div class="result-card-title">📍 Predicted Datum Position</div>
+                    <div class="coord-display">
+                        <span id="res-lat">—</span> , <span id="res-lon">—</span>
+                    </div>
+                    <div id="res-object-type" class="object-label"></div>
+                </div>
+
+                <!-- Stats grid -->
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Duration</div>
+                        <div class="stat-value" id="res-duration">—</div>
+                        <div class="stat-unit">hours</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Drift Speed</div>
+                        <div class="stat-value" id="res-drift-speed">—</div>
+                        <div class="stat-unit">knots</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Drift Distance</div>
+                        <div class="stat-value" id="res-drift-dist">—</div>
+                        <div class="stat-unit">nm</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Bearing</div>
+                        <div class="stat-value" id="res-bearing">—</div>
+                        <div class="stat-unit">degrees</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Search Radius</div>
+                        <div class="stat-value" id="res-radius">—</div>
+                        <div class="stat-unit">nm</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Leeway Factor</div>
+                        <div class="stat-value" id="res-leeway">—</div>
+                        <div class="stat-unit">× wind speed</div>
+                    </div>
+                </div>
+
+                <!-- Map -->
+                <div id="map-container">
+                    <div id="drift-map"></div>
+                </div>
+
+                <!-- Copy coords button -->
+                <button class="copy-btn" onclick="copyCoords()">📋 Copy Datum Coordinates</button>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- ── SAR Patterns placeholder ── -->
+    <section id="section-patterns" class="content-section hidden">
+        <div class="panel coming-soon">
+            <div class="cs-icon">🔭</div>
+            <h2>SAR Patterns</h2>
+            <p>Expanding-square and sector search pattern generation — coming soon.</p>
+        </div>
+    </section>
+
+    <!-- ── GPX Circles placeholder ── -->
+    <section id="section-gpx" class="content-section hidden">
+        <div class="panel coming-soon">
+            <div class="cs-icon">🗺️</div>
+            <h2>GPX Circles</h2>
+            <p>GPX circle export for GPS navigation devices — coming soon.</p>
+        </div>
+    </section>
+
+    <!-- ── Footer ── -->
+    <div class="bottom-section">
+        <div class="version-text">Version 8.0 (This copy will expire after the 01 Dec 2026.)</div>
+    </div>
+
+</div><!-- /app-window -->
+
+<!-- ── Loading overlay ── -->
+<div id="loading-overlay" class="hidden">
+    <div class="spinner"></div>
+    <div class="loading-text">Calculating drift datum…</div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  Config
+// ─────────────────────────────────────────────
+const API_BASE = 'http://localhost:5000';
+
+// ─────────────────────────────────────────────
+//  Section switcher
+// ─────────────────────────────────────────────
+function showSection(name) {
+    ['datums','patterns','gpx'].forEach(s => {
+        document.getElementById('section-' + s).classList.toggle('hidden', s !== name);
+        document.getElementById('btn-' + s).classList.toggle('active-btn', s === name);
+    });
+}
+
+// ─────────────────────────────────────────────
+//  Leaflet map (lazy initialised)
+// ─────────────────────────────────────────────
+let _map = null, _startMarker = null, _datumMarker = null, _searchCircle = null, _driftLine = null;
+
+function initMap(startLat, startLon, datumLat, datumLon, radiusNm) {
+    const MILES_TO_METRES = 1852;
+
+    if (!_map) {
+        _map = L.map('drift-map').setView([startLat, startLon], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+            maxZoom: 19
+        }).addTo(_map);
+    }
+
+    // Remove old layers
+    [_startMarker, _datumMarker, _searchCircle, _driftLine].forEach(l => l && _map.removeLayer(l));
+
+    const startIcon = L.divIcon({ className:'', html:'<div class="map-icon start-icon">🔵</div>' });
+    const datumIcon = L.divIcon({ className:'', html:'<div class="map-icon datum-icon">🔴</div>' });
+
+    _startMarker  = L.marker([startLat, startLon], { icon: startIcon })
+                      .bindPopup('<b>Last Known Position</b><br>' + startLat.toFixed(5) + ', ' + startLon.toFixed(5))
+                      .addTo(_map);
+
+    _datumMarker  = L.marker([datumLat, datumLon], { icon: datumIcon })
+                      .bindPopup('<b>Predicted Datum</b><br>' + datumLat.toFixed(5) + ', ' + datumLon.toFixed(5))
+                      .addTo(_map).openPopup();
+
+    _driftLine    = L.polyline([[startLat, startLon],[datumLat, datumLon]], {
+                        color: '#4a90d9', weight: 2, dashArray: '6 4'
+                    }).addTo(_map);
+
+    _searchCircle = L.circle([datumLat, datumLon], {
+                        radius: radiusNm * MILES_TO_METRES,
+                        color: '#ff6b35', fillColor: '#ff6b35', fillOpacity: 0.10, weight: 2
+                    }).addTo(_map);
+
+    const bounds = L.latLngBounds(
+        [[startLat, startLon],[datumLat, datumLon]]
+    ).pad(0.3);
+    _map.fitBounds(bounds);
+}
+
+// ─────────────────────────────────────────────
+//  Main API call
+// ─────────────────────────────────────────────
+async function calculateDrift() {
+    clearError();
+
+    // Collect inputs
+    const lat           = parseFloat(document.getElementById('inp-lat').value);
+    const lon           = parseFloat(document.getElementById('inp-lon').value);
+    const startRaw      = document.getElementById('inp-start').value;   // "2025-03-15T10:00"
+    const endRaw        = document.getElementById('inp-end').value;
+    const windSpeed     = parseFloat(document.getElementById('inp-wind-speed').value);
+    const windDirection = parseFloat(document.getElementById('inp-wind-dir').value);
+    const objectId      = parseInt(document.getElementById('inp-object').value);
+
+    // Basic client-side validation
+    if (isNaN(lat) || isNaN(lon) || isNaN(windSpeed) || isNaN(windDirection)) {
+        showError('Please fill in all numeric fields.'); return;
+    }
+    if (!startRaw || !endRaw) {
+        showError('Please select both start and end times.'); return;
+    }
+    const start_time = startRaw + ':00';
+    const end_time   = endRaw   + ':00';
+    if (start_time >= end_time) {
+        showError('End time must be after start time.'); return;
+    }
+
+    // Show loading
+    setLoading(true);
+
+    try {
+        const response = await fetch(`${API_BASE}/api/drift`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat, lon, start_time, end_time, wind_speed: windSpeed, wind_direction: windDirection, object_id: objectId })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            showError(data.error || 'Server error – please check the backend.');
+            return;
+        }
+
+        displayResults(data, lat, lon);
+
+    } catch (err) {
+        showError('Cannot reach the backend (http://localhost:5000). Make sure app.py is running.');
+    } finally {
+        setLoading(false);
+    }
+}
+
+// ─────────────────────────────────────────────
+//  Render results  (Component B)
+// ─────────────────────────────────────────────
+function displayResults(data, origLat, origLon) {
+    const d = data.drift;
+    const s = data.search_area;
+    const i = data.input;
+
+    document.getElementById('res-lat').textContent        = d.datum_lat.toFixed(5) + '°';
+    document.getElementById('res-lon').textContent        = d.datum_lon.toFixed(5) + '°';
+    document.getElementById('res-object-type').textContent = i.object_type;
+    document.getElementById('res-duration').textContent   = d.duration_hours;
+    document.getElementById('res-drift-speed').textContent = d.drift_speed_kts;
+    document.getElementById('res-drift-dist').textContent = d.drift_distance_nm;
+    document.getElementById('res-bearing').textContent    = d.drift_bearing_deg + '°';
+    document.getElementById('res-radius').textContent     = s.radius_nm;
+    document.getElementById('res-leeway').textContent     = d.leeway_factor;
+
+    document.getElementById('results-placeholder').classList.add('hidden');
+    document.getElementById('results-content').classList.remove('hidden');
+
+    // Draw map
+    setTimeout(() => {
+        initMap(origLat, origLon, d.datum_lat, d.datum_lon, s.radius_nm);
+    }, 100);
+}
+
+// ─────────────────────────────────────────────
+//  Helpers
+// ─────────────────────────────────────────────
+function showError(msg) {
+    const el = document.getElementById('error-msg');
+    el.textContent = '⚠ ' + msg;
+    el.classList.remove('hidden');
+}
+function clearError() {
+    document.getElementById('error-msg').classList.add('hidden');
+}
+function setLoading(on) {
+    document.getElementById('loading-overlay').classList.toggle('hidden', !on);
+    document.getElementById('btn-calculate').disabled = on;
+}
+function resetForm() {
+    document.getElementById('results-placeholder').classList.remove('hidden');
+    document.getElementById('results-content').classList.add('hidden');
+    clearError();
+}
+function copyCoords() {
+    const lat = document.getElementById('res-lat').textContent;
+    const lon = document.getElementById('res-lon').textContent;
+    navigator.clipboard.writeText(`${lat}, ${lon}`).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = '✅ Copied!';
+        setTimeout(() => btn.textContent = '📋 Copy Datum Coordinates', 2000);
+    });
+}
+</script>
 </body>
 </html>
