@@ -4,181 +4,422 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Search and Rescue Datums</title>
-        <link rel="stylesheet" href="style.css">
-
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <div id="mainpage">
-    <div class="app-window">
-        <!-- 顶部横幅区 -->
-        <div class="banner">
-            <div class="banner-title">Search and Rescue Datums</div>
-            <div class="banner-email">email: pci590@police.govt.nz</div>
-        </div>
-
-        <!-- 主标题区 -->
-        <div class="main-heading">
-            Hauraki Gulf Tidal Drift Datums.<br>
-            (High Definition)
-        </div>
-
-        <!-- 3D复古按钮组 -->
-        <div class="btn-container">
-            <button class="retro-btn" onclick="openPopup()">SAR Datums</button>
-            <button class="retro-btn">SAR Patterns</button>
-            <button class="retro-btn">GPX Circles</button>
-        </div>
-
-        <!-- 底部区（小字与地图占位图） -->
-        <div class="bottom-section">
-            <div class="version-text">
-                Version 8.0 (This copy will expire after the 01 Dec 2026.)
+        <div class="app-window">
+            <div class="banner">
+                <div class="banner-title">Search and Rescue Datums</div>
+                <div class="banner-email">email: pci590@police.govt.nz</div>
             </div>
-            
+
+            <div class="main-heading">
+                Hauraki Gulf Tidal Drift Datums.<br>
+                (High Definition)
+            </div>
+
+            <div class="btn-container">
+                <button class="retro-btn" onclick="openPopup()">SAR Datums</button>
+                <button class="retro-btn">SAR Patterns</button>
+                <button class="retro-btn">GPX Circles</button>
+            </div>
+
+            <div class="bottom-section">
+                <div class="version-text">
+                    Version 8.0 (This copy will expire after the 01 Dec 2026.)
+                </div>
+            </div>
         </div>
     </div>
+
+    <div id="popupOverlay" class="overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <span>Vessel Adrift</span>
+                <button class="close-btn" onclick="closePopup()">X</button>
+            </div>
+
+            <div class="section-grid">
+                <label>Latitude</label>
+                <button type="button" onclick="openLatitudePopup()" id="latBtn">00&deg; 00.000' S</button>
+
+                <label>LKP Time</label>
+                <button type="button" onclick="openLkpTimePopup()" id="lkpTimeBtn">0000 Hr; 14 Feb 26</button>
+
+                <button class="small-btn">Clear Data</button>
+
+                <label>Longitude</label>
+                <button type="button" onclick="openLongitudePopup()" id="lonBtn">000&deg; 00.000' E</button>
+
+                <label>Arrival Time</label>
+                <button type="button" onclick="openArrivalTimePopup()" id="arrivalTimeBtn">0000 Hr; 16 Feb 26</button>
+
+                <div></div>
+
+                <label>Wind</label>
+                <input>
+
+                <label></label>
+                <label class="checkbox">
+                    <input type="checkbox" checked>
+                    Use Downloaded Wind Data
+                </label>
+            </div>
+
+            <div class="object-row">
+                <label>Object</label>
+                <button type="button" onclick="openObjectPopup()" id="objectBtn">Unknown PIW</button>
+            </div>
+
+            <div class="checkbox-group">
+                <label><input type="checkbox"> Reverse Track Drift</label>
+                <label><input type="checkbox"> Time Uncertain</label>
+                <label><input type="checkbox"> Add Divergence Angle of 30&deg;</label>
+            </div>
+
+            <p class="note">
+                Remember wind direction is the direction the wind is coming from
+            </p>
+
+            <div class="top-buttons">
+                <button>Download File</button>
+                <button>Clear All Wind Data</button>
+            </div>
+
+            <div class="wind-section">
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date / Time</th>
+                                <th>Direction (&deg;T)</th>
+                                <th>Speed (knots)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+
+                <div class="side-buttons">
+                    <button onclick="addRow()">Add Row</button>
+                    <button onclick="modifyRow()">Modify</button>
+                    <button onclick="deleteRow()">Delete</button>
+                </div>
+            </div>
+        </div>
     </div>
 
-<div id="popupOverlay" class="overlay">
+    <div id="latLonPopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Enter Latitude and Longitude</span>
+                <button class="close-btn" onclick="closeLatLonPopup()">X</button>
+            </div>
 
-<div class="modal">
+            <div class="latlon-grid header">
+                <div></div>
+                <div>Degrees</div>
+                <div>Minutes</div>
+                <div>Seconds</div>
+            </div>
 
-<div class="modal-header">
-    <span>Vessel Adrift</span>
-    <button class="close-btn" onclick="closePopup()">✕</button>
-</div>
+            <div class="latlon-grid">
+                <label>Latitude:</label>
+                <input id="latDeg" type="number" min="0" max="90" step="1" value="00">
+                <input id="latMin" type="number" min="0" max="59" step="1" value="00">
+                <input id="latSec" type="number" min="0" max="59.999" step="0.001" value="00.000" disabled>
 
-<!-- POSITION INFO -->
-<div class="section-grid">
+                <label>Longitude:</label>
+                <input id="lonDeg" type="number" min="0" max="180" step="1" value="000">
+                <input id="lonMin" type="number" min="0" max="59" step="1" value="00">
+                <input id="lonSec" type="number" min="0" max="59.999" step="0.001" value="00.000" disabled>
+            </div>
 
-<label>Latitude</label>
-<button onclick="openLatLonPopup('lat')" id="latBtn">00° 00.000' N</button>
+            <div class="radio-group">
+                <label><input type="radio" name="format" value="deg" onchange="setCoordinateFormat(this.value)"> Degrees</label>
+                <label><input type="radio" name="format" value="deg-min" onchange="setCoordinateFormat(this.value)" checked> Degrees Minutes</label>
+                <label><input type="radio" name="format" value="deg-min-sec" onchange="setCoordinateFormat(this.value)"> Degrees Minutes Seconds</label>
+            </div>
 
-<label>LKP Time</label>
-<input value="0000 hr; 14 Feb 26">
-
-<button class="small-btn">Clear Data</button>
-
-<label>Longitude</label>
-<button onclick="openLatLonPopup('lon')" id="lonBtn">00° 00.000' N</button>
-
-<label>Arrival Time</label>
-<input value="0000 hr; 16 Feb 26">
-
-<div></div>
-
-<label>Wind</label>
-<input>
-
-<label></label>
-<label class="checkbox">
-<input type="checkbox" checked>
-Use Downloaded Wind Data
-</label>
-
-</div>
-
-<p class="tide">
-High Tide at Auckland is at 0000 hr on 14 Feb 26
-</p>
-
-<!-- OBJECT -->
-<div class="object-row">
-<label>Object</label>
-<!-- JUST A PLACEHOLDER FOR NOW (NEED TO MAKE IT FUNCTIONAL)-->
-<input value="Unknown PIW">
-</div>
-
-<!-- OPTIONS -->
-<div class="checkbox-group">
-
-<label><input type="checkbox"> Reverse Track Drift</label>
-<label><input type="checkbox"> Time Uncertain</label>
-<label><input type="checkbox"> Add Divergence Angle of 30°</label>
-
-</div>
-
-<p class="note">
-Remember wind direction is the direction the wind is coming from
-</p>
-
-<!-- WIND BUTTONS -->
-<div class="top-buttons">
-<button>Download File</button>
-<button>Clear All Wind Data</button>
-</div>
-
-<!-- WIND TABLE -->
-<div class="wind-section">
-
-<div class="table-container">
-
-<table>
-<thead>
-<tr>
-<th>Date / Time</th>
-<th>Direction (°T)</th>
-<th>Speed (knots)</th>
-</tr>
-</thead>
-
-<tbody id="tableBody">
-
-</tbody>
-
-</table>
-
-</div>
-
-<div class="side-buttons">
-<button onclick="addRow()">Add Row</button>
-<button onclick="modifyRow()">Modify</button>
-<button onclick="deleteRow()">Delete</button>
-</div>
-
-</div>
-
-</div>
-</div>
-<!-- Latitude/Longitude Popup -->
-<div id="latLonPopup" class="overlay">
-
-  <div class="modal small-modal">
-
-    <div class="modal-header">
-      <span>Enter Latitude and Longitude</span>
-      <button class="close-btn" onclick="closeLatLonPopup()">✕</button>
+            <div class="latlon-footer">
+                <button class="done-btn" onclick="saveLatLon()">Done</button>
+            </div>
+        </div>
     </div>
 
-    <div class="latlon-grid header">
-      <div></div>
-      <div>Degrees</div>
-      <div>Minutes</div>
+    <div id="lkpTimePopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Enter LKP Time</span>
+                <button class="close-btn" onclick="closeLkpTimePopup()">X</button>
+            </div>
+
+            <div class="time-popup-grid">
+                <label for="lkpDate">Date</label>
+                <input id="lkpDate" type="date">
+
+                <label for="lkpTimeInput">Time</label>
+                <input id="lkpTimeInput" type="text" inputmode="numeric" maxlength="7" placeholder="0000 Hr">
+            </div>
+
+            <div class="time-popup-actions">
+                <button type="button" class="small-btn" onclick="useCurrentLkpDateTime()">Current Time</button>
+                <button type="button" class="done-btn" onclick="saveLkpTime()">Done</button>
+            </div>
+        </div>
     </div>
 
-    <div class="latlon-grid">
-      <label>Latitude:</label>
-      <input id="latDeg" value="00">
-      <input id="latMin" value="00.000">
+    <div id="arrivalTimePopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Enter Arrival Time</span>
+                <button class="close-btn" onclick="closeArrivalTimePopup()">X</button>
+            </div>
 
-      <label>Longitude:</label>
-      <input id="lonDeg" value="00">
-      <input id="lonMin" value="00.000">
+            <div class="time-popup-grid">
+                <label for="arrivalDate">Date</label>
+                <input id="arrivalDate" type="date">
+
+                <label for="arrivalTimeInput">Time</label>
+                <input id="arrivalTimeInput" type="text" inputmode="numeric" maxlength="7" placeholder="0000 Hr">
+            </div>
+
+            <div class="time-popup-actions">
+                <button type="button" class="small-btn" onclick="useCurrentArrivalDateTime()">Current Time</button>
+                <button type="button" class="done-btn" onclick="saveArrivalTime()">Done</button>
+            </div>
+        </div>
     </div>
 
-    <div class="radio-group">
-      <label><input type="radio" name="format"> Degrees</label>
-      <label><input type="radio" name="format" checked> Degrees Minutes</label>
-      <label><input type="radio" name="format"> Degrees Minutes Seconds</label>
+    <div id="objectPopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Select Object</span>
+                <button class="close-btn" onclick="closeObjectPopup()">X</button>
+            </div>
+
+            <div class="object-options">
+                <button type="button" onclick="openPiwPopup()">Person in Water</button>
+                <button type="button" onclick="openLifeRaftPopup()">Life Raft</button>
+                <button type="button" onclick="openSurvivalCraftPopup()">Survival Craft</button>
+                <button type="button" onclick="openPersonPoweredCraftPopup()">Person-Powered Craft</button>
+                <button type="button" onclick="selectObject('Personal Water Craft 2-Person Sit on Top')">Personal Water Craft 2-Person Sit on Top</button>
+                <button type="button" onclick="openPowerDrivenVesselsPopup()">Power Driven Vessels</button>
+                <button type="button" onclick="openSailingVesselsPopup()">Sailing Vessels</button>
+                <button type="button" onclick="openCommercialFishingVesselsPopup()">Commercial Fishing Vessels</button>
+                <button type="button" onclick="openImmigrationVesselPopup()">Immigration Vessel</button>
+                <button type="button" onclick="openOtherTargetsPopup()">Other Targets</button>
+            </div>
+        </div>
     </div>
 
-    <div class="latlon-footer">
-      <button class="done-btn" onclick="saveLatLon()">Done</button>
+    <div id="piwPopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Select Person in Water</span>
+                <button class="close-btn" onclick="closePiwPopup()">X</button>
+            </div>
+
+            <div class="object-options">
+                <button type="button" onclick="selectObject('Unknown PIW')">Unknown PIW</button>
+                <button type="button" onclick="selectObject('PIW with PFD (Average)')">PIW with PFD (Average)</button>
+                <button type="button" onclick="selectObject('PIW without PFD (Average)')">PIW without PFD (Average)</button>
+                <button type="button" onclick="selectObject('Vertical, PFD type II or III')">Vertical, PFD type II or III</button>
+                <button type="button" onclick="selectObject('Sitting PFT type I')">Sitting PFT type I</button>
+                <button type="button" onclick="selectObject('PIW Survival Suit (face up)')">PIW Survival Suit (face up)</button>
+                <button type="button" onclick="selectObject('PIW without PFD')">PIW without PFD</button>
+                <button type="button" onclick="selectObject('PIW Deceased')">PIW Deceased</button>
+                <button type="button" onclick="selectObject('Person in water horizontal in scuba suit')">Person in water horizontal in scuba suit</button>
+                <button type="button" onclick="selectObject('Deceased person in water horizontal')">Deceased person in water horizontal</button>
+            </div>
+
+            <div class="object-popup-actions">
+                <button type="button" class="small-btn" onclick="backToObjectPopup()">Back</button>
+            </div>
+        </div>
     </div>
 
-  </div>
-</div>
+    <div id="lifeRaftPopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Select Life Raft</span>
+                <button class="close-btn" onclick="closeLifeRaftPopup()">X</button>
+            </div>
+
+            <div class="object-options">
+                <button type="button" onclick="selectObject('Life Raft No Ballast')">Life Raft No Ballast</button>
+                <button type="button" onclick="selectObject('Life Raft Shallow Ballast')">Life Raft Shallow Ballast</button>
+                <button type="button" onclick="selectObject('Life Raft Deep Ballast')">Life Raft Deep Ballast</button>
+            </div>
+
+            <div class="object-popup-actions">
+                <button type="button" class="small-btn" onclick="backToObjectPopupFromLifeRaft()">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="survivalCraftPopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Select Survival Craft</span>
+                <button class="close-btn" onclick="closeSurvivalCraftPopup()">X</button>
+            </div>
+
+            <div class="object-options">
+                <button type="button" onclick="selectObject('Survival Craft - SOLAS Hard Shell Life Capsule, 22 man')">Survival Craft - SOLAS Hard Shell Life Capsule, 22 man</button>
+                <button type="button" onclick="selectObject('Survival Craft - Ovatek Hard Shell Life Raft, 4 and 7 man, lightly load, no drogue')">Survival Craft - Ovatek Hard Shell Life Raft, 4 and 7 man, lightly load, no drogue</button>
+                <button type="button" onclick="selectObject('Survival Craft - Ovatek Hard Shell Life Raft, 4&7-man, fully loaded, drogued')">Survival Craft - Ovatek Hard Shell Life Raft, 4&7-man, fully loaded, drogued</button>
+                <button type="button" onclick="selectObject('Survival Craft - Ovatek Hard Shell Life Raft, 4 man, lightly loaded, no drogue')">Survival Craft - Ovatek Hard Shell Life Raft, 4 man, lightly loaded, no drogue</button>
+                <button type="button" onclick="selectObject('Survival Craft - Ovatek Hard Shell Life Raft, 4 man, fully loaded drogued')">Survival Craft - Ovatek Hard Shell Life Raft, 4 man, fully loaded drogued</button>
+                <button type="button" onclick="selectObject('Survival Craft - Ovatek Hard Shell Life Raft, 7 man, lightly loaded, no-drogue')">Survival Craft - Ovatek Hard Shell Life Raft, 7 man, lightly loaded, no-drogue</button>
+                <button type="button" onclick="selectObject('Survival Craft - Ovatek Hard Shell Life Raft, 7 man, fully loaded, drogued')">Survival Craft - Ovatek Hard Shell Life Raft, 7 man, fully loaded, drogued</button>
+                <button type="button" onclick="selectObject('Survival Craft - USCG Sea Rescue Kit - 3 ballasted life rafts and 300 meter of line')">Survival Craft - USCG Sea Rescue Kit - 3 ballasted life rafts and 300 meter of line</button>
+                <button type="button" onclick="selectObject('Survival Craft - Aviation Life Raft, No Ballast, Canopy, 4-6 man, no drogue')">Survival Craft - Aviation Life Raft, No Ballast, Canopy, 4-6 man, no drogue</button>
+                <button type="button" onclick="selectObject('Survival Craft - Aviation Life Raft, Evacuation / Slife Raft 46-man')">Survival Craft - Aviation Life Raft, Evacuation / Slife Raft 46-man</button>
+            </div>
+
+            <div class="object-popup-actions">
+                <button type="button" class="small-btn" onclick="backToObjectPopupFromSurvivalCraft()">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="personPoweredCraftPopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Select Person-Powered Craft</span>
+                <button class="close-btn" onclick="closePersonPoweredCraftPopup()">X</button>
+            </div>
+
+            <div class="object-options">
+                <button type="button" onclick="selectObject('Person-Powered Craft - Kayak')">Person-Powered Craft - Kayak</button>
+                <button type="button" onclick="selectObject('Person-Powered Craft - Canoe')">Person-Powered Craft - Canoe</button>
+                <button type="button" onclick="selectObject('Person-Powered Craft - Surfboard w/ person')">Person-Powered Craft - Surfboard w/ person</button>
+                <button type="button" onclick="selectObject('Person-Powered Craft - Windsurfer w/ person - mast & sail in water')">Person-Powered Craft - Windsurfer w/ person - mast & sail in water</button>
+                <button type="button" onclick="selectObject('Person-Powered Craft - Stand-Up-Paddleboard w/1 POB')">Person-Powered Craft - Stand-Up-Paddleboard w/1 POB</button>
+                <button type="button" onclick="selectObject('Person-Powered Craft - Empty Stand-Up-Paddleboard')">Person-Powered Craft - Empty Stand-Up-Paddleboard</button>
+            </div>
+
+            <div class="object-popup-actions">
+                <button type="button" class="small-btn" onclick="backToObjectPopupFromPersonPoweredCraft()">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="powerDrivenVesselsPopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Select Power Driven Vessels</span>
+                <button class="close-btn" onclick="closePowerDrivenVesselsPopup()">X</button>
+            </div>
+
+            <div class="object-options">
+                <button type="button" onclick="selectObject('Skiff - modified-v, cathedral-hull, runabout outboard powerboat')">Skiff - modified-v, cathedral-hull, runabout outboard powerboat</button>
+                <button type="button" onclick="selectObject('Skiff - V-hull forward, round bottom aft (wooden Newfoundland)')">Skiff - V-hull forward, round bottom aft (wooden Newfoundland)</button>
+                <button type="button" onclick="selectObject('Swamped/Capsized Boat')">Swamped/Capsized Boat</button>
+                <button type="button" onclick="selectObject('Sport Boats - Cuddy Cabin')">Sport Boats - Cuddy Cabin</button>
+                <button type="button" onclick="selectObject('Sport Boats - Center Console')">Sport Boats - Center Console</button>
+                <button type="button" onclick="selectObject('Panga')">Panga</button>
+            </div>
+
+            <div class="object-popup-actions">
+                <button type="button" class="small-btn" onclick="backToObjectPopupFromPowerDrivenVessels()">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sailingVesselsPopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Select Sailing Vessels</span>
+                <button class="close-btn" onclick="closeSailingVesselsPopup()">X</button>
+            </div>
+
+            <div class="object-options">
+                <button type="button" onclick="selectObject('Sailboat Mono-hull (Dismasted, Average)')">Sailboat Mono-hull (Dismasted, Average)</button>
+                <button type="button" onclick="selectObject('Sailboat Mono-hull (Dismasted - rudder amidships)')">Sailboat Mono-hull (Dismasted - rudder amidships)</button>
+                <button type="button" onclick="selectObject('Sailboat Mono-hull (Dismasted - rudder missing)')">Sailboat Mono-hull (Dismasted - rudder missing)</button>
+                <button type="button" onclick="selectObject('Sailboat Mono-hull (Bare-masted, Average)')">Sailboat Mono-hull (Bare-masted, Average)</button>
+                <button type="button" onclick="selectObject('Sailboat Mono-hull (Bare-masted, rudder hove-to)')">Sailboat Mono-hull (Bare-masted, rudder hove-to)</button>
+                <button type="button" onclick="selectObject('Sunfish sailing dingy (Bare-masted, rudder missing)')">Sunfish sailing dingy (Bare-masted, rudder missing)</button>
+                <button type="button" onclick="selectObject('Skiff - v-hull bow to stern (aluminium, Norway)')">Skiff - v-hull bow to stern (aluminium, Norway)</button>
+                <button type="button" onclick="selectObject('Mono hull sailing vessel with full keel and deep draft')">Mono hull sailing vessel with full keel and deep draft</button>
+                <button type="button" onclick="selectObject('Fin keeled sailing vessel with shallow draft')">Fin keeled sailing vessel with shallow draft</button>
+            </div>
+
+            <div class="object-popup-actions">
+                <button type="button" class="small-btn" onclick="backToObjectPopupFromSailingVessels()">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="commercialFishingVesselsPopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Select Commercial Fishing Vessels</span>
+                <button class="close-btn" onclick="closeCommercialFishingVesselsPopup()">X</button>
+            </div>
+
+            <div class="object-options">
+                <button type="button" onclick="selectObject('Commercial Fishing Vessels (Average)')">Commercial Fishing Vessels (Average)</button>
+                <button type="button" onclick="selectObject('Sampans')">Sampans</button>
+                <button type="button" onclick="selectObject('Side-Stern Trawler')">Side-Stern Trawler</button>
+                <button type="button" onclick="selectObject('Long liner')">Long liner</button>
+                <button type="button" onclick="selectObject('Coastal Fishing Vessel')">Coastal Fishing Vessel</button>
+                <button type="button" onclick="selectObject('Gill-Netter w/real reel')">Gill-Netter w/real reel</button>
+                <button type="button" onclick="selectObject('Coastal Freighter')">Coastal Freighter</button>
+            </div>
+
+            <div class="object-popup-actions">
+                <button type="button" class="small-btn" onclick="backToObjectPopupFromCommercialFishingVessels()">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="immigrationVesselPopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Select Immigration Vessel</span>
+                <button class="close-btn" onclick="closeImmigrationVesselPopup()">X</button>
+            </div>
+
+            <div class="object-options">
+                <button type="button" onclick="selectObject('Immigration Vessel - Refugee raft w/o sail')">Immigration Vessel - Refugee raft w/o sail</button>
+                <button type="button" onclick="selectObject('Immiration Vessel - Refugee raft w sail')">Immiration Vessel - Refugee raft w sail</button>
+            </div>
+
+            <div class="object-popup-actions">
+                <button type="button" class="small-btn" onclick="backToObjectPopupFromImmigrationVessel()">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="otherTargetsPopup" class="overlay">
+        <div class="modal small-modal">
+            <div class="modal-header">
+                <span>Select Other Targets</span>
+                <button class="close-btn" onclick="closeOtherTargetsPopup()">X</button>
+            </div>
+
+            <div class="object-options">
+                <button type="button" onclick="selectObject('Boating Debris')">Boating Debris</button>
+                <button type="button" onclick="selectObject('Sewage/Medical Waste')">Sewage/Medical Waste</button>
+                <button type="button" onclick="selectObject('Bale of Cocaine')">Bale of Cocaine</button>
+                <button type="button" onclick="selectObject('55-gallon Oil Drum')">55-gallon Oil Drum</button>
+                <button type="button" onclick="selectObject('20-ft Shipping Container (80% submerged)')">20-ft Shipping Container (80% submerged)</button>
+                <button type="button" onclick="selectObject('40-ft Shipping COntainer (70% submerged)')">40-ft Shipping COntainer (70% submerged)</button>
+                <button type="button" onclick="selectObject('WWII L-MK2 mine')">WWII L-MK2 mine</button>
+                <button type="button" onclick="selectObject('Navy Submarine EPIRB (SEPIRB)')">Navy Submarine EPIRB (SEPIRB)</button>
+            </div>
+
+            <div class="object-popup-actions">
+                <button type="button" class="small-btn" onclick="backToObjectPopupFromOtherTargets()">Back</button>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

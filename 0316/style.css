@@ -132,6 +132,8 @@
             background: #fff;
             box-shadow: 1px 1px 5px rgba(0,0,0,0.1);
         }
+
+
 /* Overlay */
 .overlay{
     display:none;
@@ -147,7 +149,7 @@
     width:900px;
     background:white;
     border:1px solid #aaa;
-    padding:20px 24px;
+    padding:22px 26px 24px;
     box-shadow:0 5px 20px rgba(0,0,0,0.25);
 }
 
@@ -172,8 +174,9 @@
 .section-grid{
     display:grid;
     grid-template-columns:120px 220px 120px 220px auto;
-    gap:8px 12px;
+    gap:10px 14px;
     align-items:center;
+    margin-bottom:18px;
 }
 
 input{
@@ -182,6 +185,7 @@ input{
 
 .small-btn{
     padding:5px 10px;
+    align-self:center;
 }
 
 /* Text */
@@ -191,21 +195,24 @@ input{
 }
 
 .note{
-    margin:12px 0;
+    margin:14px 0 16px;
 }
 
 /* Object */
 .object-row{
     display:grid;
     grid-template-columns:120px 1fr;
-    margin-bottom:10px;
+    align-items:center;
+    gap:14px;
+    margin-bottom:16px;
 }
 
 /* Checkboxes */
 .checkbox-group{
     display:flex;
+    flex-wrap:wrap;
     gap:25px;
-    margin-bottom:10px;
+    margin-bottom:8px;
 }
 
 .checkbox{
@@ -218,13 +225,14 @@ input{
 .top-buttons{
     display:flex;
     justify-content:space-between;
-    margin:12px 0;
+    margin:18px 0 14px;
 }
 
 /* Wind section */
 .wind-section{
     display:flex;
     gap:20px;
+    align-items:flex-start;
 }
 
 .table-container{
@@ -268,7 +276,7 @@ thead{
 /* Lat/Lon layout */
 .latlon-grid{
     display:grid;
-    grid-template-columns: 100px 120px 120px;
+    grid-template-columns: 100px 90px 90px 90px;
     gap:10px;
     align-items:center;
     margin-bottom:12px;
@@ -290,6 +298,12 @@ thead{
     text-align:left;
 }
 
+.latlon-grid input:disabled{
+    background:#efefef;
+    color:#777;
+    cursor:not-allowed;
+}
+
 .radio-group{
     margin:15px 0;
     display:flex;
@@ -307,10 +321,52 @@ thead{
 }
 
 /* Make lat/lon buttons look like inputs */
-#latBtn, #lonBtn{
+#latBtn, #lonBtn, #lkpTimeBtn, #arrivalTimeBtn, #objectBtn{
     text-align:left;
     background:white;
     border:1px solid #aaa;
     padding:6px;
     width:100%;
+    min-height:34px;
+}
+
+.time-popup-grid{
+    display:grid;
+    grid-template-columns:90px 1fr;
+    gap:12px;
+    align-items:center;
+    margin-bottom:16px;
+}
+
+.time-popup-grid input{
+    width:100%;
+    box-sizing:border-box;
+}
+
+.time-popup-actions{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.object-options{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+}
+
+.object-popup-actions{
+    margin-top:12px;
+}
+
+.object-options button{
+    text-align:left;
+    padding:8px 10px;
+    border:1px solid #aaa;
+    background:#fff;
+    cursor:pointer;
+}
+
+.object-options button:hover{
+    background:#f3f3f3;
 }
