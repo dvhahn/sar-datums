@@ -57,16 +57,21 @@ def drift():
 
     # Build response
     result_positions = []
+    gpx_points = []          # list of (Coordinate, datetime) for GPX
     for i, pos in enumerate(positions):
         t = start_time.timestamp() + (i * 360)  # 0.1h = 360 seconds
+        dt = datetime.fromtimestamp(t)
+
         result_positions.append({
             "lat": round(pos.lat, 6),
             "lon": round(pos.lon, 6),
-            "time": datetime.fromtimestamp(t).isoformat()
+            "time": dt.isoformat()
         })
 
-    # Generate GPX string and store temporarily
-    gpx_content = generate_gpx(positions, name="SAR Drift Prediction")
+        gpx_points.append((pos, dt))
+
+    # Generate GPX using the correct list of (Coordinate, datetime)
+    gpx_content = generate_gpx(gpx_points, name="SAR Drift Prediction")
     app.config['last_gpx'] = gpx_content
 
     return jsonify({
