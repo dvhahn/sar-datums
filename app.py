@@ -1,10 +1,12 @@
 from flask import Flask, request, jsonify, Response
+from flask_cors import CORS
 from datetime import datetime
 from domain.model import Coordinate, Wind, SearchObject
 from services.drift import calculate_drift
 from services.gpx import generate_gpx
 
 app = Flask(__name__)
+CORS(app)  # Allow cross-origin requests from any frontend
 
 # Search object types (from Peter's Excel - Setup sheet column N-O)
 # Each object has wind drift coefficients (a, b)
