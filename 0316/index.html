@@ -71,10 +71,10 @@
                     <label for="inp-object">Object Type</label>
                     <select id="inp-object">
                         <option value="1">1 – Person in Water</option>
-                        <option value="2">2 – Life Raft (no ballast)</option>
-                        <option value="3">3 – Disabled Motorboat</option>
-                        <option value="4">4 – Sailboat (hull down)</option>
-                        <option value="5">5 – Debris / Container</option>
+                        <option value="2">2 – PIW with PFD (Average)</option>
+                        <option value="3">3 – Life Raft (No ballast, No canopy, No drogue)</option>
+                        <option value="4">4 – Person-Powered Craft – Surfboard w/ person</option>
+                        <option value="5">5 – 55-gallon Oil Drum</option>
                     </select>
                 </div>
             </div>
@@ -132,14 +132,14 @@
                         <div class="stat-unit">degrees</div>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-label">Search Radius</div>
-                        <div class="stat-value" id="res-radius">—</div>
-                        <div class="stat-unit">nm</div>
+                        <div class="stat-label">Track Points</div>
+                        <div class="stat-value" id="res-track-points">—</div>
+                        <div class="stat-unit">positions</div>
                     </div>
                     <div class="stat-item">
-                        <div class="stat-label">Leeway Factor</div>
-                        <div class="stat-value" id="res-leeway">—</div>
-                        <div class="stat-unit">× wind speed</div>
+                        <div class="stat-label">Arrival Time</div>
+                        <div class="stat-value" id="res-arrival">—</div>
+                        <div class="stat-unit">local</div>
                     </div>
                 </div>
 
@@ -148,8 +148,13 @@
                     <div id="drift-map"></div>
                 </div>
 
-                <!-- Copy coords button -->
-                <button class="copy-btn" onclick="copyCoords()">📋 Copy Datum Coordinates</button>
+                <!-- Action buttons -->
+                <div class="action-buttons">
+                    <button class="copy-btn" onclick="copyCoords()">📋 Copy Datum Coordinates</button>
+                    <a id="gpx-download-btn" class="gpx-btn" href="http://localhost:5000/api/gpx" download="drift_prediction.gpx">
+                        ⬇ Download GPX
+                    </a>
+                </div>
             </div>
         </div>
 
@@ -205,13 +210,18 @@ function showSection(name) {
 // ─────────────────────────────────────────────
 //  Leaflet map (lazy initialised)
 // ─────────────────────────────────────────────
-let _map = null, _startMarker = null, _datumMarker = null, _searchCircle = null, _driftLine = null;
+let _map = null, _startMarker = null, _datumMarker = null, _driftLine = null;
 
-function initMap(startLat, startLon, datumLat, datumLon, radiusNm) {
-    const MILES_TO_METRES = 1852;
+/**
+ * Draw the map using the full positions array from the API.
+ * @param {Array<{lat:number, lon:number, time:string}>} positions - all track points
+ */
+function initMap(positions) {
+    const start = positions[0];
+    const datum = positions[positions.length - 1];
 
     if (!_map) {
-        _map = L.map('drift-map').setView([startLat, startLon], 10);
+        _map = L.map('drift-map').setView([start.lat, start.lon], 10);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
             maxZoom: 19
@@ -219,32 +229,26 @@ function initMap(startLat, startLon, datumLat, datumLon, radiusNm) {
     }
 
     // Remove old layers
-    [_startMarker, _datumMarker, _searchCircle, _driftLine].forEach(l => l && _map.removeLayer(l));
+    [_startMarker, _datumMarker, _driftLine].forEach(l => l && _map.removeLayer(l));
 
     const startIcon = L.divIcon({ className:'', html:'<div class="map-icon start-icon">🔵</div>' });
     const datumIcon = L.divIcon({ className:'', html:'<div class="map-icon datum-icon">🔴</div>' });
 
-    _startMarker  = L.marker([startLat, startLon], { icon: startIcon })
-                      .bindPopup('<b>Last Known Position</b><br>' + startLat.toFixed(5) + ', ' + startLon.toFixed(5))
-                      .addTo(_map);
+    _startMarker = L.marker([start.lat, start.lon], { icon: startIcon })
+                    .bindPopup('<b>Last Known Position</b><br>' + start.lat.toFixed(5) + ', ' + start.lon.toFixed(5))
+                    .addTo(_map);
 
-    _datumMarker  = L.marker([datumLat, datumLon], { icon: datumIcon })
-                      .bindPopup('<b>Predicted Datum</b><br>' + datumLat.toFixed(5) + ', ' + datumLon.toFixed(5))
-                      .addTo(_map).openPopup();
+    _datumMarker = L.marker([datum.lat, datum.lon], { icon: datumIcon })
+                    .bindPopup('<b>Predicted Datum</b><br>' + datum.lat.toFixed(5) + ', ' + datum.lon.toFixed(5))
+                    .addTo(_map).openPopup();
 
-    _driftLine    = L.polyline([[startLat, startLon],[datumLat, datumLon]], {
-                        color: '#4a90d9', weight: 2, dashArray: '6 4'
-                    }).addTo(_map);
+    // Draw polyline through ALL positions
+    const latlngs = positions.map(p => [p.lat, p.lon]);
+    _driftLine = L.polyline(latlngs, {
+        color: '#4a90d9', weight: 2.5, dashArray: '6 4'
+    }).addTo(_map);
 
-    _searchCircle = L.circle([datumLat, datumLon], {
-                        radius: radiusNm * MILES_TO_METRES,
-                        color: '#ff6b35', fillColor: '#ff6b35', fillOpacity: 0.10, weight: 2
-                    }).addTo(_map);
-
-    const bounds = L.latLngBounds(
-        [[startLat, startLon],[datumLat, datumLon]]
-    ).pad(0.3);
-    _map.fitBounds(bounds);
+    _map.fitBounds(_driftLine.getBounds().pad(0.3));
 }
 
 // ─────────────────────────────────────────────
@@ -292,7 +296,7 @@ async function calculateDrift() {
             return;
         }
 
-        displayResults(data, lat, lon);
+        displayResults(data, objectId);
 
     } catch (err) {
         showError('Cannot reach the backend (http://localhost:5000). Make sure app.py is running.');
@@ -303,29 +307,94 @@ async function calculateDrift() {
 
 // ─────────────────────────────────────────────
 //  Render results  (Component B)
+//
+//  API response format:
+//  {
+//    "positions": [
+//      { "lat": -36.800000, "lon": 174.800000, "time": "2025-03-15T10:00:00" },
+//      ...
+//    ],
+//    "gpx_url": "/api/gpx"
+//  }
 // ─────────────────────────────────────────────
-function displayResults(data, origLat, origLon) {
-    const d = data.drift;
-    const s = data.search_area;
-    const i = data.input;
+function displayResults(data, objectId) {
+    const positions = data.positions;
 
-    document.getElementById('res-lat').textContent        = d.datum_lat.toFixed(5) + '°';
-    document.getElementById('res-lon').textContent        = d.datum_lon.toFixed(5) + '°';
-    document.getElementById('res-object-type').textContent = i.object_type;
-    document.getElementById('res-duration').textContent   = d.duration_hours;
-    document.getElementById('res-drift-speed').textContent = d.drift_speed_kts;
-    document.getElementById('res-drift-dist').textContent = d.drift_distance_nm;
-    document.getElementById('res-bearing').textContent    = d.drift_bearing_deg + '°';
-    document.getElementById('res-radius').textContent     = s.radius_nm;
-    document.getElementById('res-leeway').textContent     = d.leeway_factor;
+    if (!positions || positions.length === 0) {
+        showError('No position data returned from server.');
+        return;
+    }
 
+    // Datum = LAST item in positions array
+    const datum = positions[positions.length - 1];
+    const start = positions[0];
+
+    // ── Datum coordinates ──
+    document.getElementById('res-lat').textContent = datum.lat.toFixed(5) + '°';
+    document.getElementById('res-lon').textContent = datum.lon.toFixed(5) + '°';
+
+    // ── Object type label ──
+    const objectLabels = {
+        1: 'Person in Water',
+        2: 'PIW with PFD (Average)',
+        3: 'Life Raft – No ballast, No canopy, No drogue',
+        4: 'Person-Powered Craft – Surfboard w/ person',
+        5: '55-gallon Oil Drum'
+    };
+    document.getElementById('res-object-type').textContent = objectLabels[objectId] || `Object type ${objectId}`;
+
+    // ── Compute stats from positions ──
+    const startMs = new Date(start.time).getTime();
+    const endMs   = new Date(datum.time).getTime();
+    const durationHrs = ((endMs - startMs) / 3600000).toFixed(2);
+
+    const distNm  = haversineNm(start.lat, start.lon, datum.lat, datum.lon);
+    const bearing  = bearingDeg(start.lat, start.lon, datum.lat, datum.lon);
+    const speedKts = durationHrs > 0 ? (distNm / durationHrs).toFixed(2) : '—';
+
+    // Arrival time (human-readable, local)
+    const arrivalStr = new Date(datum.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    document.getElementById('res-duration').textContent    = durationHrs;
+    document.getElementById('res-drift-speed').textContent = speedKts;
+    document.getElementById('res-drift-dist').textContent  = distNm.toFixed(2);
+    document.getElementById('res-bearing').textContent     = bearing.toFixed(1) + '°';
+    document.getElementById('res-track-points').textContent = positions.length;
+    document.getElementById('res-arrival').textContent     = arrivalStr;
+
+    // ── Show results panel ──
     document.getElementById('results-placeholder').classList.add('hidden');
     document.getElementById('results-content').classList.remove('hidden');
 
-    // Draw map
+    // ── Draw map with ALL positions ──
     setTimeout(() => {
-        initMap(origLat, origLon, d.datum_lat, d.datum_lon, s.radius_nm);
+        initMap(positions);
     }, 100);
+}
+
+// ─────────────────────────────────────────────
+//  Geo helpers  (client-side stats)
+// ─────────────────────────────────────────────
+
+/** Haversine distance in nautical miles */
+function haversineNm(lat1, lon1, lat2, lon2) {
+    const R = 3440.065; // Earth radius in nm
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** True bearing in degrees (0-360) from point 1 to point 2 */
+function bearingDeg(lat1, lon1, lat2, lon2) {
+    const toRad = d => d * Math.PI / 180;
+    const dLon  = toRad(lon2 - lon1);
+    const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2))
+            - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
 // ─────────────────────────────────────────────
