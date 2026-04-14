@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search and Rescue Datums - Hauraki Gulf</title>
+    <meta name="description" content="High-definition SAR tidal drift datum calculator for the Hauraki Gulf region.">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+
+<div class="app-window">
+    <div class="banner">
+        <div class="banner-title">Search and Rescue Datums</div>
+        <div class="banner-email">email: pci590@police.govt.nz</div>
+    </div>
+
+    <div class="main-heading">
+        Hauraki Gulf Tidal Drift Datums.<br>(High Definition)
+    </div>
+
+    <div class="btn-container">
+        <button class="retro-btn active-btn" id="btn-datums" onclick="showSection('datums')">SAR Datums</button>
+        <button class="retro-btn" id="btn-patterns" onclick="showSection('patterns')">SAR Patterns</button>
+        <button class="retro-btn" id="btn-gpx" onclick="showSection('gpx')">GPX Export</button>
+    </div>
+
+    <section id="section-datums" class="content-section">
+        <div class="panel" id="panel-input">
+            <h2 class="panel-title">Drift Input Parameters</h2>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="inp-lat">Latitude (deg)</label>
+                    <input id="inp-lat" type="number" step="0.000001" value="-36.8" placeholder="-36.8">
+                </div>
+                <div class="form-group">
+                    <label for="inp-lon">Longitude (deg)</label>
+                    <input id="inp-lon" type="number" step="0.000001" value="174.8" placeholder="174.8">
+                </div>
+                <div class="form-group">
+                    <label for="inp-start">Start Time</label>
+                    <input id="inp-start" type="datetime-local">
+                </div>
+                <div class="form-group">
+                    <label for="inp-end">End Time</label>
+                    <input id="inp-end" type="datetime-local">
+                </div>
+                <div class="form-group">
+                    <label for="inp-wind-speed">Wind Speed (kts)</label>
+                    <input id="inp-wind-speed" type="number" min="0" max="200" value="15">
+                </div>
+                <div class="form-group">
+                    <label for="inp-wind-dir">Wind Direction (deg)</label>
+                    <input id="inp-wind-dir" type="number" min="0" max="359" value="180" placeholder="0 = North, 180 = South">
+                </div>
+                <div class="form-group span-2">
+                    <label for="inp-object">Object Type</label>
+                    <select id="inp-object"></select>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button class="calc-btn" id="btn-calculate" onclick="calculateDrift()">
+                    <span class="btn-icon">+</span> Calculate Datum
+                </button>
+                <button class="clear-btn" onclick="resetForm()">Clear</button>
+            </div>
+
+            <div id="error-msg" class="error-box hidden"></div>
+        </div>
+
+        <div class="panel" id="panel-results">
+            <h2 class="panel-title">Drift Results</h2>
+
+            <div id="results-placeholder" class="placeholder-text">
+                Fill in the parameters above and click <strong>Calculate Datum</strong>
+                to see the predicted drift position.
+            </div>
+
+            <div id="results-content" class="hidden">
+                <div class="result-card highlight-card">
+                    <div class="result-card-title">Predicted Datum Position</div>
+                    <div class="coord-display">
+                        <span id="res-lat">-</span> , <span id="res-lon">-</span>
+                    </div>
+                    <div id="res-object-type" class="object-label"></div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Duration</div>
+                        <div class="stat-value" id="res-duration">-</div>
+                        <div class="stat-unit">hours</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Drift Speed</div>
+                        <div class="stat-value" id="res-drift-speed">-</div>
+                        <div class="stat-unit">knots</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Drift Distance</div>
+                        <div class="stat-value" id="res-drift-dist">-</div>
+                        <div class="stat-unit">nm</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Bearing</div>
+                        <div class="stat-value" id="res-bearing">-</div>
+                        <div class="stat-unit">degrees</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Track Points</div>
+                        <div class="stat-value" id="res-points">-</div>
+                        <div class="stat-unit">samples</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Leeway Factor</div>
+                        <div class="stat-value" id="res-leeway">-</div>
+                        <div class="stat-unit">x wind speed</div>
+                    </div>
+                </div>
+
+                <div id="map-container">
+                    <div id="drift-map"></div>
+                </div>
+
+                <div class="action-row">
+                    <button class="copy-btn" onclick="copyCoords()">Copy Datum Coordinates</button>
+                    <a id="download-gpx" class="copy-btn hidden" href="/api/gpx" download="drift_prediction.gpx">Download GPX</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="section-patterns" class="content-section hidden">
+        <div class="panel coming-soon">
+            <div class="cs-icon">Search</div>
+            <h2>SAR Patterns</h2>
+            <p>Expanding-square and sector search pattern generation are not wired up yet.</p>
+        </div>
+    </section>
+
+    <section id="section-gpx" class="content-section hidden">
+        <div class="panel coming-soon">
+            <div class="cs-icon">GPX</div>
+            <h2>GPX Export</h2>
+            <p>Run a datum calculation first, then download the generated GPX track from the results panel.</p>
+        </div>
+    </section>
+
+    <div class="bottom-section">
+        <div class="version-text">Version 8.0 (This copy will expire after 01 Dec 2026.)</div>
+    </div>
+</div>
+
+<div id="loading-overlay" class="hidden">
+    <div class="spinner"></div>
+    <div class="loading-text">Calculating drift datum...</div>
+</div>
+
+<script>
+const DEFAULT_OBJECTS = [
+    { id: 1, name: 'Person in Water' },
+    { id: 2, name: 'PIW with PFD (Average)' },
+    { id: 3, name: 'Life Raft - No ballast, No canopy, No drogue' },
+    { id: 4, name: 'Person-Powered Craft - Surfboard w/ person' },
+    { id: 5, name: '55-gallon Oil Drum' }
+];
+
+let map = null;
+let mapLayers = [];
+
+function showSection(name) {
+    ['datums', 'patterns', 'gpx'].forEach((sectionName) => {
+        document.getElementById(`section-${sectionName}`).classList.toggle('hidden', sectionName !== name);
+        document.getElementById(`btn-${sectionName}`).classList.toggle('active-btn', sectionName === name);
+    });
+}
+
+function setDefaultTimes() {
+    const now = new Date();
+    now.setSeconds(0, 0);
+    const later = new Date(now.getTime() + (3 * 60 * 60 * 1000));
+
+    document.getElementById('inp-start').value = toDatetimeLocal(now);
+    document.getElementById('inp-end').value = toDatetimeLocal(later);
+}
+
+function toDatetimeLocal(date) {
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+async function loadObjects() {
+    const select = document.getElementById('inp-object');
+
+    try {
+        const response = await fetch('/api/objects');
+        if (!response.ok) {
+            throw new Error('Unable to load objects');
+        }
+
+        const objects = await response.json();
+        renderObjects(select, objects);
+    } catch (error) {
+        renderObjects(select, DEFAULT_OBJECTS);
+    }
+}
+
+function renderObjects(select, objects) {
+    select.innerHTML = '';
+    objects.forEach((object) => {
+        const option = document.createElement('option');
+        option.value = object.id;
+        option.textContent = `${object.id} - ${object.name}`;
+        select.appendChild(option);
+    });
+}
+
+function showError(message) {
+    const errorBox = document.getElementById('error-msg');
+    errorBox.textContent = message;
+    errorBox.classList.remove('hidden');
+}
+
+function clearError() {
+    document.getElementById('error-msg').classList.add('hidden');
+}
+
+function setLoading(isLoading) {
+    document.getElementById('loading-overlay').classList.toggle('hidden', !isLoading);
+    document.getElementById('btn-calculate').disabled = isLoading;
+}
+
+function resetForm() {
+    document.getElementById('results-placeholder').classList.remove('hidden');
+    document.getElementById('results-content').classList.add('hidden');
+    document.getElementById('download-gpx').classList.add('hidden');
+    clearError();
+}
+
+function copyCoords() {
+    const lat = document.getElementById('res-lat').textContent;
+    const lon = document.getElementById('res-lon').textContent;
+    navigator.clipboard.writeText(`${lat}, ${lon}`).then(() => {
+        const button = document.querySelector('.copy-btn');
+        const previousLabel = button.textContent;
+        button.textContent = 'Copied';
+        setTimeout(() => {
+            button.textContent = previousLabel;
+        }, 1500);
+    });
+}
+
+function initMap(positions) {
+    if (!positions.length) {
+        return;
+    }
+
+    const start = positions[0];
+    const datum = positions[positions.length - 1];
+    const latLngs = positions.map((position) => [position.lat, position.lon]);
+
+    if (!map) {
+        map = L.map('drift-map').setView([start.lat, start.lon], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+            maxZoom: 19
+        }).addTo(map);
+    }
+
+    mapLayers.forEach((layer) => map.removeLayer(layer));
+    mapLayers = [];
+
+    const routeLine = L.polyline(latLngs, {
+        color: '#4a90d9',
+        weight: 3
+    }).addTo(map);
+
+    const startMarker = L.marker([start.lat, start.lon]).bindPopup(`Start<br>${start.lat.toFixed(5)}, ${start.lon.toFixed(5)}`);
+    startMarker.addTo(map);
+
+    const datumMarker = L.marker([datum.lat, datum.lon]).bindPopup(`Datum<br>${datum.lat.toFixed(5)}, ${datum.lon.toFixed(5)}`);
+    datumMarker.addTo(map).openPopup();
+
+    mapLayers.push(routeLine, startMarker, datumMarker);
+
+    map.fitBounds(routeLine.getBounds().pad(0.2));
+}
+
+async function calculateDrift() {
+    clearError();
+
+    const lat = Number.parseFloat(document.getElementById('inp-lat').value);
+    const lon = Number.parseFloat(document.getElementById('inp-lon').value);
+    const startRaw = document.getElementById('inp-start').value;
+    const endRaw = document.getElementById('inp-end').value;
+    const windSpeed = Number.parseFloat(document.getElementById('inp-wind-speed').value);
+    const windDirection = Number.parseFloat(document.getElementById('inp-wind-dir').value);
+    const objectId = Number.parseInt(document.getElementById('inp-object').value, 10);
+
+    if ([lat, lon, windSpeed, windDirection].some(Number.isNaN)) {
+        showError('Please fill in all numeric fields.');
+        return;
+    }
+
+    if (!startRaw || !endRaw) {
+        showError('Please select both start and end times.');
+        return;
+    }
+
+    const startTime = `${startRaw}:00`;
+    const endTime = `${endRaw}:00`;
+
+    if (startTime >= endTime) {
+        showError('End time must be after start time.');
+        return;
+    }
+
+    setLoading(true);
+
+    try {
+        const response = await fetch('/api/drift', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                lat,
+                lon,
+                start_time: startTime,
+                end_time: endTime,
+                wind_speed: windSpeed,
+                wind_direction: windDirection,
+                object_id: objectId
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'The backend returned an error.');
+        }
+
+        displayResults(data);
+    } catch (error) {
+        showError(error.message || 'Unable to reach the backend.');
+    } finally {
+        setLoading(false);
+    }
+}
+
+function displayResults(data) {
+    const summary = data.summary || {};
+    const positions = data.positions || [];
+    const datum = positions[positions.length - 1];
+
+    if (!datum) {
+        showError('No drift positions were returned.');
+        return;
+    }
+
+    document.getElementById('res-lat').textContent = `${datum.lat.toFixed(5)} deg`;
+    document.getElementById('res-lon').textContent = `${datum.lon.toFixed(5)} deg`;
+    document.getElementById('res-object-type').textContent = summary.object_type || 'Unknown object';
+    document.getElementById('res-duration').textContent = formatNumber(summary.duration_hours);
+    document.getElementById('res-drift-speed').textContent = formatNumber(summary.drift_speed_kts);
+    document.getElementById('res-drift-dist').textContent = formatNumber(summary.drift_distance_nm);
+    document.getElementById('res-bearing').textContent = formatNumber(summary.drift_bearing_deg);
+    document.getElementById('res-points').textContent = positions.length;
+    document.getElementById('res-leeway').textContent = formatNumber(summary.leeway_factor, 3);
+
+    document.getElementById('results-placeholder').classList.add('hidden');
+    document.getElementById('results-content').classList.remove('hidden');
+
+    const downloadLink = document.getElementById('download-gpx');
+    downloadLink.href = data.gpx_url || '/api/gpx';
+    downloadLink.classList.remove('hidden');
+
+    setTimeout(() => initMap(positions), 100);
+}
+
+function formatNumber(value, digits = 2) {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return '-';
+    }
+    return value.toFixed(digits);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    setDefaultTimes();
+    await loadObjects();
+});
+</script>
+</body>
+</html>

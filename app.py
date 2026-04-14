@@ -1,3 +1,4 @@
+import math
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from datetime import datetime
@@ -5,7 +6,7 @@ from domain.model import Coordinate, Wind, SearchObject
 from services.drift import calculate_drift
 from services.gpx import generate_gpx
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='ui_ux', static_url_path='')
 CORS(app)  # Allow cross-origin requests from any frontend
 
 # Search object types (from Peter's Excel - Setup sheet column N-O)
@@ -20,9 +21,48 @@ SEARCH_OBJECTS = {
     # TODO: Add more from Peter's data
 }
 
+METRES_PER_NAUTICAL_MILE = 1852
+
+
+def _calculate_distance_nm(start: Coordinate, end: Coordinate) -> float:
+    """Approximate great-circle distance in nautical miles."""
+    lat1 = math.radians(start.lat)
+    lon1 = math.radians(start.lon)
+    lat2 = math.radians(end.lat)
+    lon2 = math.radians(end.lon)
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return (6371000 * c) / METRES_PER_NAUTICAL_MILE
+
+
+def _calculate_bearing(start: Coordinate, end: Coordinate) -> float:
+    """Calculate initial bearing from start to end."""
+    lat1 = math.radians(start.lat)
+    lat2 = math.radians(end.lat)
+    dlon = math.radians(end.lon - start.lon)
+
+    x = math.sin(dlon) * math.cos(lat2)
+    y = (
+        math.cos(lat1) * math.sin(lat2)
+        - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    )
+    return (math.degrees(math.atan2(x, y)) + 360) % 360
+
 
 @app.route('/')
 def home():
+    return app.send_static_file('index.html')
+
+
+@app.route('/api')
+def api_home():
     return {"message": "SAR Datums API is running"}
 
 
@@ -81,9 +121,24 @@ def drift():
     gpx_content = generate_gpx(gpx_points, name="SAR Drift Prediction")
     app.config['last_gpx'] = gpx_content
 
+    final_position = positions[-1]
+    duration_hours = (end_time - start_time).total_seconds() / 3600
+    drift_distance_nm = _calculate_distance_nm(start_pos, final_position)
+    drift_speed_kts = drift_distance_nm / duration_hours if duration_hours > 0 else 0.0
+    drift_bearing_deg = _calculate_bearing(start_pos, final_position) if len(positions) > 1 else 0.0
+    leeway_factor = search_object.coefficient_a if wind.speed > 5 else 0.0
+
     return jsonify({
         "positions": result_positions,
-        "gpx_url": "/api/gpx"
+        "gpx_url": "/api/gpx",
+        "summary": {
+            "object_type": search_object.name,
+            "duration_hours": round(duration_hours, 2),
+            "drift_distance_nm": round(drift_distance_nm, 3),
+            "drift_speed_kts": round(drift_speed_kts, 3),
+            "drift_bearing_deg": round(drift_bearing_deg, 1),
+            "leeway_factor": round(leeway_factor, 3),
+        }
     })
 
 
