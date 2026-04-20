@@ -5,6 +5,7 @@ from datetime import datetime
 from domain.model import Coordinate, Wind, SearchObject
 from services.drift import calculate_drift
 from services.gpx import generate_gpx
+from services.kml import generate_kml
 
 app = Flask(__name__, static_folder='ui_ux', static_url_path='')
 CORS(app)  # Allow cross-origin requests from any frontend
@@ -117,9 +118,11 @@ def drift():
 
         gpx_points.append((pos, dt))
 
-    # Generate GPX using the correct list of (Coordinate, datetime)
+    # Generate GPX and KML using the correct list of (Coordinate, datetime)
     gpx_content = generate_gpx(gpx_points, name="SAR Drift Prediction")
+    kml_content = generate_kml(gpx_points, name="SAR Drift Prediction")
     app.config['last_gpx'] = gpx_content
+    app.config['last_kml'] = kml_content
 
     final_position = positions[-1]
     duration_hours = (end_time - start_time).total_seconds() / 3600
@@ -131,6 +134,7 @@ def drift():
     return jsonify({
         "positions": result_positions,
         "gpx_url": "/api/gpx",
+        "kml_url": "/api/kml",
         "summary": {
             "object_type": search_object.name,
             "duration_hours": round(duration_hours, 2),
@@ -154,6 +158,21 @@ def gpx():
         gpx_content,
         mimetype='application/gpx+xml',
         headers={'Content-Disposition': 'attachment; filename=drift_prediction.gpx'}
+    )
+
+
+@app.route('/api/kml')
+def kml():
+    """Download the last generated KML file."""
+    kml_content = app.config.get('last_kml')
+
+    if kml_content is None:
+        return jsonify({"error": "No KML data available. Run /api/drift first."}), 404
+
+    return Response(
+        kml_content,
+        mimetype='application/vnd.google-earth.kml+xml',
+        headers={'Content-Disposition': 'attachment; filename=drift_prediction.kml'}
     )
 
 

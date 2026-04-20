@@ -129,6 +129,7 @@
                 <div class="action-row">
                     <button class="copy-btn" onclick="copyCoords()">Copy Datum Coordinates</button>
                     <a id="download-gpx" class="copy-btn hidden" href="/api/gpx" download="drift_prediction.gpx">Download GPX</a>
+                    <a id="download-kml" class="copy-btn hidden" href="/api/kml" download="drift_prediction.kml">Download KML</a>
                 </div>
             </div>
         </div>
@@ -238,6 +239,7 @@ function resetForm() {
     document.getElementById('results-placeholder').classList.remove('hidden');
     document.getElementById('results-content').classList.add('hidden');
     document.getElementById('download-gpx').classList.add('hidden');
+    document.getElementById('download-kml').classList.add('hidden');
     clearError();
 }
 
@@ -373,9 +375,13 @@ function displayResults(data) {
     document.getElementById('results-placeholder').classList.add('hidden');
     document.getElementById('results-content').classList.remove('hidden');
 
-    const downloadLink = document.getElementById('download-gpx');
-    downloadLink.href = data.gpx_url || '/api/gpx';
-    downloadLink.classList.remove('hidden');
+    const downloadGpxLink = document.getElementById('download-gpx');
+    downloadGpxLink.href = data.gpx_url || '/api/gpx';
+    downloadGpxLink.classList.remove('hidden');
+
+    const downloadKmlLink = document.getElementById('download-kml');
+    downloadKmlLink.href = data.kml_url || '/api/kml';
+    downloadKmlLink.classList.remove('hidden');
 
     setTimeout(() => initMap(positions), 100);
 }
