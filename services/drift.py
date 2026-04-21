@@ -18,7 +18,7 @@ SPRING_FLOOD_STEPS = 62
 # DB connection settings
 DB_NAME = os.getenv("DB_NAME", "sar_datums")
 DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "golden50")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 
