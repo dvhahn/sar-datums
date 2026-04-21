@@ -18,7 +18,7 @@ SPRING_FLOOD_STEPS = 62
 # DB connection settings
 DB_NAME = os.getenv("DB_NAME", "sar_datums")
 DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "golden50")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 
@@ -222,68 +222,62 @@ def get_tidal_current(cur, lat: float, lon: float, current_time: datetime, confi
 
     return CurrentVector(vx, vy)
 
-
-def apply_drift_step(position: Coordinate, current: CurrentVector, leeway: CurrentVector, time_delta_seconds: float) -> Coordinate:
+def apply_drift_step(position: Coordinate, current: CurrentVector, leeway: CurrentVector, time_delta_seconds: float, multiplier: float = 1.0) -> Coordinate:
     """Calculate new position after drifting for time_delta_seconds.
     Combines tidal current + wind leeway, converts to lat/lon displacement.
     """
-    total_vx = current.vx + leeway.vx
-    total_vy = current.vy + leeway.vy
+    # Apply the multiplier to the total vectors
+    total_vx = (current.vx + leeway.vx) * multiplier
+    total_vy = (current.vy + leeway.vy) * multiplier
 
-    dx = total_vx * time_delta_seconds  # metres
-    dy = total_vy * time_delta_seconds  # metres
+    dx = total_vx * time_delta_seconds
+    dy = total_vy * time_delta_seconds
 
     new_lat = position.lat + (dy / METRES_PER_DEGREE_LAT)
     new_lon = position.lon + ((dx / METRES_PER_DEGREE_LAT) / math.cos(math.radians(position.lat)))
 
     return Coordinate(new_lat, new_lon)
 
-
-def calculate_drift(
-    start_position: Coordinate,
-    start_time: datetime,
-    end_time: datetime,
-    wind: Wind,
-    search_object: SearchObject
-) -> list[Coordinate]:
-    """Calculate the full drift trajectory from start_time to end_time.
-
-    Loops in 0.1-hour (6-minute) steps:
-      1. Get tidal current at current position and time
-      2. Get wind leeway
-      3. Combine and move to new position
-      4. Repeat until end_time
-
-    Returns a list of Coordinate objects representing the drift path.
-    """
+def calculate_drift(start_position, start_time, end_time, wind, search_object, is_reverse=False) -> list[Coordinate]:
     conn = _get_db_connection()
     cur = conn.cursor()
     config = _get_config(cur)
 
-    # Pre-calculate leeway (constant unless using variable wind data)
     leeway = calculate_leeway(wind, search_object)
 
     positions = [start_position]
     current_position = start_position
     current_time = start_time
 
+    # Decide direction of logic
+    multiplier = -1.0 if is_reverse else 1.0
+
+    # Absolute seconds for the step, but logic handles the 'while'
     step_delta = timedelta(hours=TIME_STEP_HOURS)
 
-    while current_time < end_time:
-        # Don't overshoot the end time
-        next_time = current_time + step_delta
-        if next_time > end_time:
-            next_time = end_time
-        actual_seconds = (next_time - current_time).total_seconds()
+    # Use a condition that handles both directions
+    def has_not_reached_end(current, end, reverse):
+        return current < end if not reverse else current > end
+
+    while has_not_reached_end(current_time, end_time, is_reverse):
+        # Determine next time step
+        if is_reverse:
+            next_time = current_time - step_delta
+            if next_time < end_time: next_time = end_time
+        else:
+            next_time = current_time + step_delta
+            if next_time > end_time: next_time = end_time
+
+        actual_seconds = abs((next_time - current_time).total_seconds())
 
         # Get tidal current at this position and time
         tidal_current = get_tidal_current(
             cur, current_position.lat, current_position.lon, current_time, config
         )
 
-        # Apply drift step
+        # Apply drift step with multiplier
         current_position = apply_drift_step(
-            current_position, tidal_current, leeway, actual_seconds
+            current_position, tidal_current, leeway, actual_seconds, multiplier
         )
 
         positions.append(current_position)
@@ -291,5 +285,4 @@ def calculate_drift(
 
     cur.close()
     conn.close()
-
     return positions

@@ -60,6 +60,15 @@
                     <label for="inp-object">Object Type</label>
                     <select id="inp-object"></select>
                 </div>
+                 <div class="form-group span-2">
+                    <label>Tracking Mode</label>
+                    <div class="tracking-toggle-container">
+                        <input type="checkbox" id="inp-reverse">
+                        <label for="inp-reverse" class="tracking-toggle-label">
+                            Reverse Track (Found Position → Origin)
+                        </label>
+                    </div>
+                </div>
             </div>
 
             <div class="form-actions">
@@ -256,44 +265,47 @@ function copyCoords() {
     });
 }
 
-function initMap(positions) {
-    if (!positions.length) {
-        return;
-    }
+function initMap(positions, isReverse = false) {
+    if (!positions.length) return;
 
     const start = positions[0];
     const datum = positions[positions.length - 1];
-    const latLngs = positions.map((position) => [position.lat, position.lon]);
+    const latLngs = positions.map((p) => [p.lat, p.lon]);
+    const trackColor = isReverse ? '#f39c12' : '#4a90d9';
+    const startLabel = isReverse ? "Location Found" : "Start Position";
+    const endLabel = isReverse ? "Predicted Origin" : "Predicted Datum";
 
     if (!map) {
         map = L.map('drift-map').setView([start.lat, start.lon], 10);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
-            maxZoom: 19
+            attribution: '&copy; OpenStreetMap'
         }).addTo(map);
     }
 
     mapLayers.forEach((layer) => map.removeLayer(layer));
     mapLayers = [];
-
     const routeLine = L.polyline(latLngs, {
-        color: '#4a90d9',
-        weight: 3
+        color: trackColor,
+        weight: 4,
+        dashArray: isReverse ? '5, 10' : null
     }).addTo(map);
 
-    const startMarker = L.marker([start.lat, start.lon]).bindPopup(`Start<br>${start.lat.toFixed(5)}, ${start.lon.toFixed(5)}`);
-    startMarker.addTo(map);
-
-    const datumMarker = L.marker([datum.lat, datum.lon]).bindPopup(`Datum<br>${datum.lat.toFixed(5)}, ${datum.lon.toFixed(5)}`);
-    datumMarker.addTo(map).openPopup();
-
+    const startMarker = L.marker([start.lat, start.lon]).bindPopup(startLabel).addTo(map);
+    const datumMarker = L.marker([datum.lat, datum.lon]).bindPopup(endLabel).addTo(map);
     mapLayers.push(routeLine, startMarker, datumMarker);
-
+    datumMarker.openPopup();
     map.fitBounds(routeLine.getBounds().pad(0.2));
 }
 
 async function calculateDrift() {
     clearError();
+
+    const reverseEl = document.getElementById('inp-reverse');
+    if (!reverseEl) {
+        showError("Developer Error: Checkbox 'inp-reverse' is missing from HTML.");
+        return;
+    }
+    const isReverse = reverseEl.checked;
 
     const lat = Number.parseFloat(document.getElementById('inp-lat').value);
     const lon = Number.parseFloat(document.getElementById('inp-lon').value);
@@ -316,8 +328,12 @@ async function calculateDrift() {
     const startTime = `${startRaw}:00`;
     const endTime = `${endRaw}:00`;
 
-    if (startTime >= endTime) {
-        showError('End time must be after start time.');
+    if (!isReverse && startTime >= endTime) {
+        showError('For Forward Drift, End Time must be AFTER Start Time.');
+        return;
+    }
+    if (isReverse && startTime <= endTime) {
+        showError('For Reverse Track, Start Time (Time Found) must be AFTER End Time (LKP).');
         return;
     }
 
@@ -328,31 +344,29 @@ async function calculateDrift() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                lat,
-                lon,
+                lat, lon,
                 start_time: startTime,
                 end_time: endTime,
                 wind_speed: windSpeed,
                 wind_direction: windDirection,
-                object_id: objectId
+                object_id: objectId,
+                is_reverse: isReverse
             })
         });
 
         const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Backend error.');
 
-        if (!response.ok) {
-            throw new Error(data.error || 'The backend returned an error.');
-        }
+        displayResults(data, isReverse);
 
-        displayResults(data);
     } catch (error) {
-        showError(error.message || 'Unable to reach the backend.');
+        showError(error.message);
     } finally {
         setLoading(false);
     }
 }
 
-function displayResults(data) {
+function displayResults(data, isReverse) {
     const summary = data.summary || {};
     const positions = data.positions || [];
     const datum = positions[positions.length - 1];
@@ -362,6 +376,7 @@ function displayResults(data) {
         return;
     }
 
+    // Update coordinates and text
     document.getElementById('res-lat').textContent = `${datum.lat.toFixed(5)} deg`;
     document.getElementById('res-lon').textContent = `${datum.lon.toFixed(5)} deg`;
     document.getElementById('res-object-type').textContent = summary.object_type || 'Unknown object';
@@ -372,9 +387,11 @@ function displayResults(data) {
     document.getElementById('res-points').textContent = positions.length;
     document.getElementById('res-leeway').textContent = formatNumber(summary.leeway_factor, 3);
 
+    // Show result panel
     document.getElementById('results-placeholder').classList.add('hidden');
     document.getElementById('results-content').classList.remove('hidden');
 
+    // Update Download Links
     const downloadGpxLink = document.getElementById('download-gpx');
     downloadGpxLink.href = data.gpx_url || '/api/gpx';
     downloadGpxLink.classList.remove('hidden');
@@ -383,7 +400,7 @@ function displayResults(data) {
     downloadKmlLink.href = data.kml_url || '/api/kml';
     downloadKmlLink.classList.remove('hidden');
 
-    setTimeout(() => initMap(positions), 100);
+    setTimeout(() => initMap(positions, isReverse), 100);
 }
 
 function formatNumber(value, digits = 2) {
