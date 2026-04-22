@@ -349,6 +349,54 @@ body {
   transform: scale(0.8);
 }
 
+.fab.dragging {
+  transform: scale(1.15);
+  box-shadow: 0 12px 40px rgba(10, 132, 255, 0.5);
+  cursor: grabbing;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.fab.dragging svg {
+  opacity: 0;
+}
+
+.fab.dragging::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
+}
+
+.drag-coord {
+  position: fixed;
+  z-index: 25;
+  pointer-events: none;
+  padding: 5px 10px;
+
+  background: var(--color-surface);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text);
+  white-space: nowrap;
+
+  opacity: 0;
+  transform: translate(20px, 16px);
+  transition: opacity 0.15s;
+}
+
+.drag-coord.visible {
+  opacity: 1;
+}
+
 /* ============================================================
    Center card — modal-style input panel.
    ============================================================ */

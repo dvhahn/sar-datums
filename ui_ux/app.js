@@ -84,7 +84,71 @@ function closeCard() {
 
 cardClose.addEventListener('click', closeCard);
 cardBackdrop.addEventListener('click', closeCard);
-fab.addEventListener('click', openCard);
+
+
+// ── FAB: click = open card, drag = pin drop then open card with coords
+const dragCoord = document.getElementById('dragCoord');
+const DRAG_THRESHOLD = 6;
+
+let dragging = false;
+let dragMoved = false;
+let dragStartX = 0;
+let dragStartY = 0;
+
+fab.addEventListener('pointerdown', (e) => {
+  dragging = true;
+  dragMoved = false;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  fab.setPointerCapture(e.pointerId);
+});
+
+fab.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+
+  const dx = e.clientX - dragStartX;
+  const dy = e.clientY - dragStartY;
+
+  if (!dragMoved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+    dragMoved = true;
+    fab.classList.add('dragging');
+    dragCoord.classList.add('visible');
+  }
+
+  if (dragMoved) {
+    fab.style.left   = (e.clientX - 26) + 'px';
+    fab.style.top    = (e.clientY - 26) + 'px';
+    fab.style.right  = 'auto';
+    fab.style.bottom = 'auto';
+
+    const lngLat = map.unproject([e.clientX, e.clientY]);
+    dragCoord.style.left = e.clientX + 'px';
+    dragCoord.style.top  = e.clientY + 'px';
+    dragCoord.textContent = `${lngLat.lat.toFixed(5)}°, ${lngLat.lng.toFixed(5)}°`;
+  }
+});
+
+fab.addEventListener('pointerup', (e) => {
+  if (!dragging) return;
+  dragging = false;
+  fab.releasePointerCapture(e.pointerId);
+
+  if (dragMoved) {
+    const lngLat = map.unproject([e.clientX, e.clientY]);
+    inpLat.value = lngLat.lat.toFixed(5);
+    inpLon.value = lngLat.lng.toFixed(5);
+  }
+
+  // Reset FAB visuals back to bottom-right
+  fab.classList.remove('dragging');
+  dragCoord.classList.remove('visible');
+  fab.style.left   = '';
+  fab.style.top    = '';
+  fab.style.right  = '';
+  fab.style.bottom = '';
+
+  openCard();
+});
 
 
 // ── Calculate
