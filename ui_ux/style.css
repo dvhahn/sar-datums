@@ -314,6 +314,134 @@ body {
 }
 
 /* ============================================================
+   Credit pill — bottom-left, above nav controls.
+   Hover/focus expands upward to reveal team roster.
+   Team Hammerklavier — Beethoven Op. 106.
+   ============================================================ */
+.credit-pill {
+  position: fixed;
+  bottom: 110px;   /* sits above the MapLibre nav controls stack */
+  left: 10px;
+  z-index: 10;
+
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 180px;
+
+  background: var(--color-surface);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  cursor: default;
+  outline: none;
+  transition: box-shadow 0.25s, border-color 0.25s;
+}
+
+.credit-pill:hover,
+.credit-pill:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 8px 32px rgba(10, 132, 255, 0.18);
+}
+
+/* Compact row — always visible. */
+.credit-compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px 7px 10px;
+}
+
+.credit-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.credit-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.credit-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  letter-spacing: -0.2px;
+}
+
+.credit-sub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--color-text-dim);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+
+/* Expanded roster — hidden by default, slides in on hover. */
+.credit-expand {
+  max-height: 0;
+  opacity: 0;
+  padding: 0 14px;
+  transition: max-height 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.25s,
+              padding 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.credit-pill:hover .credit-expand,
+.credit-pill:focus-within .credit-expand {
+  max-height: 260px;
+  opacity: 1;
+  padding: 12px 14px 10px;
+}
+
+/* Individual member row: [ROLE] · [Name] */
+.credit-member {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+
+.member-role {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.member-name {
+  font-size: 12px;
+  color: var(--color-text);
+  letter-spacing: -0.1px;
+}
+
+.credit-footer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  text-align: center;
+}
+
+/* ============================================================
    FAB — floating action button, bottom-right.
    ============================================================ */
 .fab {
