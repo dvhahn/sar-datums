@@ -336,9 +336,10 @@ body {
 
   box-shadow: 0 6px 20px rgba(10, 132, 255, 0.35);
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
-              box-shadow 0.2s,
+              box-shadow 0.25s,
               opacity 0.2s,
-              background 0.2s;
+              background 0.25s,
+              color 0.25s;
 }
 
 .fab:hover {
@@ -351,27 +352,78 @@ body {
   transform: scale(0.8);
 }
 
-/* During active drag-follow, disable transform transition so the FAB tracks the pointer instantly. */
+/* Drag state: blue disc dissolves, reticle takes center. Cursor marks the exact pick point. */
 .fab.drag-following {
-  transition: box-shadow 0.2s, background 0.2s;
+  transition: box-shadow 0.25s, background 0.25s, color 0.25s;
   cursor: grabbing;
-  box-shadow: 0 16px 48px rgba(10, 132, 255, 0.55);
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-accent);
 }
 
-/* Snap zone: FAB fades so the X anchor beneath is visible. */
 .fab.snap-home {
-  opacity: 0.25;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  opacity: 0.3;
 }
 
-/* Icon swap */
+/* Icon swap — plus dissolves with a 45° twist, reticle scales in with a spring. */
+.fab-icon-plus,
 .fab-icon-target {
-  display: none;
   position: absolute;
+  inset: 0;
+  margin: auto;
+  transition: opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.fab.drag-following .fab-icon-plus  { display: none; }
-.fab.drag-following .fab-icon-target { display: block; }
+.fab-icon-plus {
+  opacity: 1;
+  transform: rotate(0) scale(1);
+}
+
+.fab-icon-target {
+  opacity: 0;
+  transform: scale(0.35);
+}
+
+.fab.drag-following .fab-icon-plus {
+  opacity: 0;
+  transform: rotate(45deg) scale(0.5);
+}
+
+.fab.drag-following .fab-icon-target {
+  opacity: 1;
+  transform: scale(1);
+  transition-delay: 0.04s;
+  filter: drop-shadow(0 2px 4px rgba(10, 132, 255, 0.5))
+          drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+/* Center dot animates in a touch later — the "lock-on" beat. */
+.fab-icon-target .reticle-dot {
+  transform-origin: 12px 12px;
+  transform: scale(0);
+  transition: transform 0.24s cubic-bezier(0.34, 1.8, 0.64, 1);
+}
+
+.fab.drag-following .reticle-dot {
+  transform: scale(1);
+  transition-delay: 0.18s;
+}
+
+/* Ticks fan outward just after the ring settles. */
+.fab-icon-target .reticle-tick {
+  transform-origin: 12px 12px;
+  transform: scale(0.5);
+  opacity: 0;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 0.2s;
+}
+
+.fab.drag-following .reticle-tick {
+  transform: scale(1);
+  opacity: 1;
+  transition-delay: 0.1s;
+}
 
 /* ============================================================
    FAB anchor — the X target that sits beneath the FAB.
