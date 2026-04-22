@@ -119,18 +119,26 @@ btnCalculate.addEventListener('click', async () => {
   btnCalculate.textContent = 'Calculating…';
 
   try {
+    // Backend expects start_time > end_time when reverse is on.
+    // Keep the form natural (earlier → later) and swap here.
+    const isReverse = inpReverse.checked;
+    const earlier = inpStart.value + ':00';
+    const later   = inpEnd.value + ':00';
+    const startTime = isReverse ? later   : earlier;
+    const endTime   = isReverse ? earlier : later;
+
     const res = await fetch('/api/drift', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         lat:            parseFloat(inpLat.value),
         lon:            parseFloat(inpLon.value),
-        start_time:     inpStart.value + ':00',
-        end_time:       inpEnd.value + ':00',
+        start_time:     startTime,
+        end_time:       endTime,
         wind_speed:     parseFloat(inpWindSpeed.value),
         wind_direction: parseFloat(inpWindDir.value),
         object_id:      parseInt(objectSelect.value, 10),
-        is_reverse:     inpReverse.checked,
+        is_reverse:     isReverse,
       }),
     });
 
