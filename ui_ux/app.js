@@ -86,18 +86,35 @@ cardClose.addEventListener('click', closeCard);
 cardBackdrop.addEventListener('click', closeCard);
 
 
-// ── FAB: click = open card, drag = pin drop then open card with coords
+// ── FAB: click = open card, drag = pin drop; drag back to corner = cancel
 const dragCoord = document.getElementById('dragCoord');
+const fabAnchor = document.getElementById('fabAnchor');
 const DRAG_THRESHOLD = 6;
+const HOME_RADIUS   = 90;   // px — within this radius of home, magnetic snap kicks in
 
-let dragging = false;
+let dragging  = false;
 let dragMoved = false;
+let inSnap    = false;
 let dragStartX = 0;
 let dragStartY = 0;
+
+function homeCenter() {
+  // FAB is 52px, positioned bottom:24 right:24 → its center sits here:
+  return {
+    x: window.innerWidth  - 24 - 26,
+    y: window.innerHeight - 24 - 26,
+  };
+}
+
+function nearHome(x, y) {
+  const h = homeCenter();
+  return Math.hypot(x - h.x, y - h.y) < HOME_RADIUS;
+}
 
 fab.addEventListener('pointerdown', (e) => {
   dragging = true;
   dragMoved = false;
+  inSnap = false;
   dragStartX = e.clientX;
   dragStartY = e.clientY;
   fab.setPointerCapture(e.pointerId);
@@ -111,15 +128,32 @@ fab.addEventListener('pointermove', (e) => {
 
   if (!dragMoved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
     dragMoved = true;
-    fab.classList.add('dragging');
+    fab.classList.add('drag-following');
+    fabAnchor.classList.add('visible');
+  }
+  if (!dragMoved) return;
+
+  const snap = nearHome(e.clientX, e.clientY);
+
+  if (snap && !inSnap) {
+    // Enter snap zone: FAB fades, X anchor highlights
+    inSnap = true;
+    fab.classList.add('snap-home');
+    fabAnchor.classList.add('highlight');
+    fab.style.transform = '';
+    dragCoord.classList.remove('visible');
+  } else if (!snap && inSnap) {
+    // Leaving snap zone: follow pointer again
+    inSnap = false;
+    fab.classList.remove('snap-home');
+    fabAnchor.classList.remove('highlight');
     dragCoord.classList.add('visible');
   }
 
-  if (dragMoved) {
-    fab.style.left   = (e.clientX - 26) + 'px';
-    fab.style.top    = (e.clientY - 26) + 'px';
-    fab.style.right  = 'auto';
-    fab.style.bottom = 'auto';
+  if (!snap) {
+    // Follow pointer via transform (offset from home)
+    const h = homeCenter();
+    fab.style.transform = `translate(${e.clientX - h.x}px, ${e.clientY - h.y}px)`;
 
     const lngLat = map.unproject([e.clientX, e.clientY]);
     dragCoord.style.left = e.clientX + 'px';
@@ -133,21 +167,22 @@ fab.addEventListener('pointerup', (e) => {
   dragging = false;
   fab.releasePointerCapture(e.pointerId);
 
-  if (dragMoved) {
+  const droppedOnMap = dragMoved && !inSnap;
+
+  if (droppedOnMap) {
     const lngLat = map.unproject([e.clientX, e.clientY]);
     inpLat.value = lngLat.lat.toFixed(5);
     inpLon.value = lngLat.lng.toFixed(5);
   }
 
-  // Reset FAB visuals back to bottom-right
-  fab.classList.remove('dragging');
+  // Reset FAB + anchor visuals
+  fab.classList.remove('drag-following', 'snap-home');
+  fabAnchor.classList.remove('visible', 'highlight');
   dragCoord.classList.remove('visible');
-  fab.style.left   = '';
-  fab.style.top    = '';
-  fab.style.right  = '';
-  fab.style.bottom = '';
+  fab.style.transform = '';
 
-  openCard();
+  // Open card on plain click or successful drop. Skip on cancel.
+  if (!dragMoved || droppedOnMap) openCard();
 });
 
 

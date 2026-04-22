@@ -335,11 +335,13 @@ body {
   cursor: pointer;
 
   box-shadow: 0 6px 20px rgba(10, 132, 255, 0.35);
-  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.2s,
+              opacity 0.2s,
+              background 0.2s;
 }
 
 .fab:hover {
-  transform: scale(1.05);
   box-shadow: 0 8px 28px rgba(10, 132, 255, 0.45);
 }
 
@@ -349,25 +351,68 @@ body {
   transform: scale(0.8);
 }
 
-.fab.dragging {
-  transform: scale(1.15);
-  box-shadow: 0 12px 40px rgba(10, 132, 255, 0.5);
+/* During active drag-follow, disable transform transition so the FAB tracks the pointer instantly. */
+.fab.drag-following {
+  transition: box-shadow 0.2s, background 0.2s;
   cursor: grabbing;
-  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 16px 48px rgba(10, 132, 255, 0.55);
 }
 
-.fab.dragging svg {
-  opacity: 0;
+/* Snap zone: FAB fades so the X anchor beneath is visible. */
+.fab.snap-home {
+  opacity: 0.25;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
-.fab.dragging::after {
-  content: '';
+/* Icon swap */
+.fab-icon-target {
+  display: none;
   position: absolute;
-  width: 10px;
-  height: 10px;
+}
+
+.fab.drag-following .fab-icon-plus  { display: none; }
+.fab.drag-following .fab-icon-target { display: block; }
+
+/* ============================================================
+   FAB anchor — the X target that sits beneath the FAB.
+   Revealed during drag as the "return here to cancel" zone.
+   ============================================================ */
+.fab-anchor {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 14;   /* just below the FAB */
+
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  color: var(--color-text-dim);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+
+  opacity: 0;
+  transform: scale(0.75);
+  transition: opacity 0.2s, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.fab-anchor.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.fab-anchor.highlight {
+  color: #ff453a;
+  border-color: rgba(255, 69, 58, 0.45);
+  background: rgba(255, 69, 58, 0.08);
+  transform: scale(1.1);
 }
 
 .drag-coord {
