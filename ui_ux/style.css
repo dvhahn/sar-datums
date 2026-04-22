@@ -58,6 +58,68 @@ body {
 }
 
 /* ============================================================
+   MapLibre controls — match the glass aesthetic.
+   ============================================================ */
+.maplibregl-ctrl-group {
+  background: var(--color-surface) !important;
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--color-border) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+}
+
+.maplibregl-ctrl-group button {
+  background: transparent !important;
+  border-bottom: 1px solid var(--color-border) !important;
+}
+
+.maplibregl-ctrl-group button:last-child {
+  border-bottom: none !important;
+}
+
+.maplibregl-ctrl-group button:hover {
+  background: var(--color-hover) !important;
+}
+
+.maplibregl-ctrl-group button span {
+  opacity: 0.7;
+}
+
+[data-theme="dark"] .maplibregl-ctrl-group button span {
+  filter: invert(1);
+}
+
+.maplibregl-ctrl-attrib {
+  background: var(--color-surface) !important;
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--color-border);
+  border-radius: 8px !important;
+  color: var(--color-text-dim) !important;
+  font-size: 10px !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--color-text-dim) !important;
+}
+
+.maplibregl-popup-content {
+  background: var(--color-surface) !important;
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--color-border);
+  border-radius: 12px !important;
+  color: var(--color-text) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
+}
+
+.maplibregl-popup-tip {
+  display: none !important;
+}
+
+/* ============================================================
    Top bar — floats above the map, centered horizontally.
    ============================================================ */
 .top-bar {
