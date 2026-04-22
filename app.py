@@ -69,30 +69,15 @@ def api_home():
 
 @app.route('/api/drift', methods=['POST'])
 def drift():
-    """Calculate drift trajectory.
-    
-    Expects JSON:
-    {
-        "lat": -36.8,
-        "lon": 174.8,
-        "start_time": "2025-03-15T10:00:00",
-        "end_time": "2025-03-15T13:00:00",
-        "wind_speed": 15,
-        "wind_direction": 180,
-        "object_id": 1
-    }
-
-    Returns JSON with positions list and GPX download URL.
-    """
     data = request.get_json()
 
-    # Parse inputs
     try:
         start_pos = Coordinate(lat=data['lat'], lon=data['lon'])
         start_time = datetime.fromisoformat(data['start_time'])
         end_time = datetime.fromisoformat(data['end_time'])
         wind = Wind(speed=data['wind_speed'], direction_deg=data['wind_direction'])
         search_object = SEARCH_OBJECTS.get(data.get('object_id', 1))
+        is_reverse = data.get('is_reverse', False)
 
         if search_object is None:
             return jsonify({"error": "Invalid object_id"}), 400
@@ -100,14 +85,24 @@ def drift():
     except (KeyError, ValueError) as e:
         return jsonify({"error": f"Invalid input: {str(e)}"}), 400
 
-    # Run drift calculation
-    positions = calculate_drift(start_pos, start_time, end_time, wind, search_object)
+    positions = calculate_drift(
+        start_pos,
+        start_time,
+        end_time,
+        wind,
+        search_object,
+        is_reverse=is_reverse
+    )
 
     # Build response
     result_positions = []
-    gpx_points = []          # list of (Coordinate, datetime) for GPX
+    gpx_points = []
+
+    # If reverse, move BACKWARDS in time (360s = 0.1h)
+    time_step_direction = -360 if is_reverse else 360
+
     for i, pos in enumerate(positions):
-        t = start_time.timestamp() + (i * 360)  # 0.1h = 360 seconds
+        t = start_time.timestamp() + (i * time_step_direction)
         dt = datetime.fromtimestamp(t)
 
         result_positions.append({
@@ -115,17 +110,18 @@ def drift():
             "lon": round(pos.lon, 6),
             "time": dt.isoformat()
         })
-
         gpx_points.append((pos, dt))
 
-    # Generate GPX and KML using the correct list of (Coordinate, datetime)
+    # Generate GPX and KML
     gpx_content = generate_gpx(gpx_points, name="SAR Drift Prediction")
     kml_content = generate_kml(gpx_points, name="SAR Drift Prediction")
     app.config['last_gpx'] = gpx_content
     app.config['last_kml'] = kml_content
 
     final_position = positions[-1]
-    duration_hours = (end_time - start_time).total_seconds() / 3600
+
+    duration_hours = abs((end_time - start_time).total_seconds() / 3600)
+
     drift_distance_nm = _calculate_distance_nm(start_pos, final_position)
     drift_speed_kts = drift_distance_nm / duration_hours if duration_hours > 0 else 0.0
     drift_bearing_deg = _calculate_bearing(start_pos, final_position) if len(positions) > 1 else 0.0
@@ -137,6 +133,7 @@ def drift():
         "kml_url": "/api/kml",
         "summary": {
             "object_type": search_object.name,
+            "is_reverse": is_reverse,  # Let the frontend know the mode
             "duration_hours": round(duration_hours, 2),
             "drift_distance_nm": round(drift_distance_nm, 3),
             "drift_speed_kts": round(drift_speed_kts, 3),

@@ -1,10 +1,14 @@
 from domain.model import Coordinate
 from datetime import datetime
+from xml.sax.saxutils import escape
 
 def generate_kml(positions: list[tuple[Coordinate, datetime]], name: str) -> str:
     """
     Generate a KML (Keyhole Markup Language) file as a string from a list of positions.
     KML is used by Google Earth and other mapping software.
+
+    Uses <gx:Track> so each point carries a timestamp, making the track
+    playable on the Google Earth time slider.
 
     Args:
         positions: List of tuples, each containing (Coordinate object, datetime).
@@ -14,16 +18,14 @@ def generate_kml(positions: list[tuple[Coordinate, datetime]], name: str) -> str
         A string containing the complete KML XML document.
     """
 
-    # Start with an empty list to collect lines of the KML file
     kml = []
 
-    # XML declaration (required)
     kml.append('<?xml version="1.0" encoding="UTF-8"?>')
 
-    # Root element with KML namespace
-    kml.append('<kml xmlns="http://www.opengis.net/kml/2.2">')
+    # gx namespace required for <gx:Track>
+    kml.append('<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">')
     kml.append('  <Document>')
-    kml.append(f'    <name>{name}</name>')
+    kml.append(f'    <name>{escape(name)}</name>')
     kml.append('    <description>SAR Drift Prediction Track</description>')
 
     # Style for the line
@@ -34,30 +36,28 @@ def generate_kml(positions: list[tuple[Coordinate, datetime]], name: str) -> str
     kml.append('      </LineStyle>')
     kml.append('    </Style>')
 
-    # Placemark for the drift path
+    # Time-aware track — each <when> pairs with the <gx:coord> at the same index
     kml.append('    <Placemark>')
-    kml.append(f'      <name>Drift Path</name>')
+    kml.append('      <name>Drift Path</name>')
     kml.append('      <styleUrl>#driftLineStyle</styleUrl>')
+    kml.append('      <gx:Track>')
 
-    # LineString with coordinates
-    kml.append('      <LineString>')
-    kml.append('        <tessellate>1</tessellate>')
-    kml.append('        <coordinates>')
-
-    # KML format: lon,lat,altitude (note: longitude comes first!)
     for coord, dt in positions:
-        kml.append(f'          {coord.lon},{coord.lat},0')
+        kml.append(f'        <when>{dt.isoformat()}</when>')
 
-    kml.append('        </coordinates>')
-    kml.append('      </LineString>')
+    # KML coordinate order: lon lat altitude (space-separated inside gx:coord)
+    for coord, dt in positions:
+        kml.append(f'        <gx:coord>{coord.lon} {coord.lat} 0</gx:coord>')
+
+    kml.append('      </gx:Track>')
     kml.append('    </Placemark>')
 
-    # Add start and end point markers
+    # Start and end point markers
     if len(positions) > 0:
         start_coord, start_time = positions[0]
         kml.append('    <Placemark>')
         kml.append('      <name>Start Point</name>')
-        kml.append(f'      <description>Time: {start_time.isoformat()}</description>')
+        kml.append(f'      <description>Time: {escape(start_time.isoformat())}</description>')
         kml.append('      <Point>')
         kml.append(f'        <coordinates>{start_coord.lon},{start_coord.lat},0</coordinates>')
         kml.append('      </Point>')
@@ -66,7 +66,7 @@ def generate_kml(positions: list[tuple[Coordinate, datetime]], name: str) -> str
         end_coord, end_time = positions[-1]
         kml.append('    <Placemark>')
         kml.append('      <name>End Point</name>')
-        kml.append(f'      <description>Time: {end_time.isoformat()}</description>')
+        kml.append(f'      <description>Time: {escape(end_time.isoformat())}</description>')
         kml.append('      <Point>')
         kml.append(f'        <coordinates>{end_coord.lon},{end_coord.lat},0</coordinates>')
         kml.append('      </Point>')
@@ -75,5 +75,4 @@ def generate_kml(positions: list[tuple[Coordinate, datetime]], name: str) -> str
     kml.append('  </Document>')
     kml.append('</kml>')
 
-    # Join all lines with newline characters to form the final XML string
     return "\n".join(kml)

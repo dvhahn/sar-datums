@@ -481,3 +481,36 @@ body::before {
         padding: 20px 18px;
     }
 }
+
+.tracking-toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(74, 144, 217, 0.4);
+    border-radius: 6px;
+    padding: 10px 14px;
+    transition: all 0.18s ease;
+    cursor: pointer;
+}
+
+.tracking-toggle-container:hover {
+    background: rgba(255, 255, 255, 0.11);
+    border-color: #79b8ff;
+}
+
+.tracking-toggle-label {
+    cursor: pointer;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 0 !important;
+    text-transform: none !important;
+}
+
+.tracking-toggle-container input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #4a90d9;
+}
