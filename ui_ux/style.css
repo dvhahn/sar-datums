@@ -1,516 +1,534 @@
-*,
-*::before,
-*::after {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
+/* ============================================================
+   Design tokens — change these once, whole app follows.
+   ============================================================ */
+:root {
+  --color-bg:        #f3f5f7;
+  --color-surface:   rgba(255, 255, 255, 0.82);
+  --color-border:    rgba(0, 0, 0, 0.08);
+  --color-text:      #1a2332;
+  --color-text-dim:  rgba(26, 35, 50, 0.55);
+  --color-accent:    #0a84ff;
+  --color-hover:     rgba(0, 0, 0, 0.04);
+
+  --radius-pill:  16px;
+  --radius-card:  24px;
+
+  --blur-glass:   blur(48px) saturate(1.9);
+
+  --font-ui:   'Outfit', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+[data-theme="dark"] {
+  --color-bg:        #0a0a0f;
+  --color-surface:   rgba(22, 22, 28, 0.72);
+  --color-border:    rgba(255, 255, 255, 0.08);
+  --color-text:      #f5f5f7;
+  --color-text-dim:  rgba(255, 255, 255, 0.55);
+  --color-hover:     rgba(255, 255, 255, 0.06);
+}
+
+/* ============================================================
+   Reset — small, targeted. No more, no less.
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
 
 body {
-    background-image: url('1.jpg');
-    background-size: cover;
-    background-position: center;
-    background-attachment: fixed;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    min-height: 100vh;
-    font-family: 'Inter', Arial, Helvetica, sans-serif;
-    padding: 30px 16px 60px;
-    color: #e8f4ff;
+  font-family: var(--font-ui);
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
 }
 
-body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: rgba(5, 18, 38, 0.7);
-    z-index: 0;
+/* ============================================================
+   Map — fills the viewport, everything else layers on top.
+   ============================================================ */
+#map {
+  position: fixed;
+  inset: 0;
 }
 
-.app-window {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    max-width: 960px;
+/* ============================================================
+   Top bar — floats above the map, centered horizontally.
+   ============================================================ */
+.top-bar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+
+  display: flex;
+  gap: 8px;
 }
 
-.banner {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 20px 0 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-    margin-bottom: 10px;
+.brand-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 8px 10px;
+
+  background: var(--color-surface);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
 }
 
-.banner-title {
-    color: #ffffff;
-    font-family: 'Times New Roman', Times, serif;
-    font-size: 44px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    text-shadow: 0 0 24px rgba(100, 180, 255, 0.55);
-    line-height: 1;
-    margin-bottom: 6px;
+.brand-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--color-accent);
 }
 
-.banner-email {
-    color: #7eb8e8;
-    font-size: 17px;
-    letter-spacing: 0.4px;
+.brand-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
 }
 
-.main-heading {
-    text-align: center;
-    font-size: 30px;
-    font-weight: 700;
-    margin-top: 28px;
-    line-height: 1.35;
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+.brand-name span {
+  color: var(--color-accent);
 }
 
-.btn-container {
-    display: flex;
-    justify-content: center;
-    gap: 24px;
-    margin-top: 28px;
-    flex-wrap: wrap;
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+
+  background: var(--color-surface);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+
+  font-size: 11px;
+  color: var(--color-text-dim);
 }
 
-.retro-btn {
-    background-color: #1e3a5f;
-    border: 2px solid #4a90d9;
-    padding: 14px 22px;
-    font-size: 18px;
-    font-family: 'Palatino Linotype', Palatino, Georgia, serif;
-    font-weight: 700;
-    letter-spacing: 1px;
-    color: #e8f4ff;
-    cursor: pointer;
-    width: 200px;
-    text-align: center;
-    border-radius: 6px;
-    transition: background-color 0.18s, border-color 0.18s, box-shadow 0.18s;
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #30d158;
+  animation: pulse 2s infinite;
 }
 
-.retro-btn:hover {
-    background-color: #2a5080;
-    border-color: #79b8ff;
-    box-shadow: 0 0 12px rgba(100, 180, 255, 0.3);
+.theme-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  color: var(--color-text-dim);
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
 }
 
-.retro-btn:active {
-    background-color: #152e4d;
+.theme-toggle:hover {
+  color: var(--color-accent);
+  background: var(--color-hover);
 }
 
-.active-btn {
-    background-color: #2a5a94;
-    border-color: #79b8ff;
-    box-shadow: 0 0 14px rgba(100, 180, 255, 0.4);
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
 }
 
-.content-section {
-    margin-top: 32px;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
+/* ============================================================
+   Result pills — floats under top-bar after a calculation.
+   ============================================================ */
+.result-pills {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
 }
 
-.hidden {
-    display: none !important;
+.result-pill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 16px;
+
+  background: var(--color-surface);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+  cursor: pointer;
+  animation: pillIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: border-color 0.15s;
 }
 
-.panel {
-    background: rgba(10, 27, 55, 0.82);
-    border: 1px solid rgba(74, 144, 217, 0.35);
-    border-radius: 12px;
-    padding: 28px 32px;
-    backdrop-filter: blur(12px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+.result-pill:hover {
+  border-color: var(--color-accent);
 }
 
-.panel-title {
-    font-size: 19px;
-    font-weight: 700;
-    color: #79b8ff;
-    margin-bottom: 22px;
-    letter-spacing: 0.5px;
-    border-bottom: 1px solid rgba(74, 144, 217, 0.25);
-    padding-bottom: 10px;
+.pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px 24px;
+.pill-coord {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+.pill-stats {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--color-text-dim);
+  white-space: nowrap;
 }
 
-.form-group.span-2 {
-    grid-column: 1 / -1;
+.pill-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 4px;
 }
 
-.form-group label {
-    font-size: 13px;
-    font-weight: 600;
-    color: #9dc8f0;
-    letter-spacing: 0.3px;
-    text-transform: uppercase;
+.pill-btn {
+  padding: 5px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-dim);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
 }
 
-.form-group input,
-.form-group select {
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(74, 144, 217, 0.4);
-    border-radius: 6px;
-    color: #e8f4ff;
-    font-size: 15px;
-    padding: 10px 14px;
-    outline: none;
-    transition: border-color 0.18s, background 0.18s;
-    width: 100%;
+.pill-btn:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
-.form-group input:focus,
-.form-group select:focus {
-    border-color: #79b8ff;
-    background: rgba(255, 255, 255, 0.11);
+.pill-btn.remove {
+  padding: 5px 8px;
+  font-size: 13px;
+  line-height: 1;
 }
 
-.form-group select option {
-    background: #0d2244;
-    color: #e8f4ff;
+@keyframes pillIn {
+  from { opacity: 0; transform: translateY(-10px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
-.form-actions {
-    display: flex;
-    gap: 14px;
-    margin-top: 24px;
-    align-items: center;
-    flex-wrap: wrap;
+/* ============================================================
+   FAB — floating action button, bottom-right.
+   ============================================================ */
+.fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 15;
+
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-accent);
+  color: #fff;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  box-shadow: 0 6px 20px rgba(10, 132, 255, 0.35);
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 
-.calc-btn {
-    background: linear-gradient(135deg, #1e6fbf, #2a90e0);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 13px 32px;
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
-    box-shadow: 0 4px 14px rgba(42, 144, 224, 0.4);
+.fab:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 28px rgba(10, 132, 255, 0.45);
 }
 
-.calc-btn:hover {
-    box-shadow: 0 6px 20px rgba(42, 144, 224, 0.6);
-    transform: translateY(-1px);
+.fab.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
 }
 
-.calc-btn:active {
-    transform: translateY(0);
+/* ============================================================
+   Center card — modal-style input panel.
+   ============================================================ */
+.card-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
 }
 
-.calc-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
+.card-wrap.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
-.btn-icon {
-    font-size: 18px;
+.card-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
-.clear-btn {
-    background: transparent;
-    color: #7eb8e8;
-    border: 1px solid rgba(74, 144, 217, 0.5);
-    border-radius: 8px;
-    padding: 12px 20px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: background 0.18s, color 0.18s;
+.card {
+  position: relative;
+  width: 420px;
+  max-width: 92vw;
+  padding: 24px;
+
+  background: var(--color-surface);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.2);
 }
 
-.clear-btn:hover {
-    background: rgba(74, 144, 217, 0.15);
-    color: #fff;
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
 }
 
-.error-box {
-    margin-top: 16px;
-    background: rgba(220, 60, 60, 0.18);
-    border: 1px solid rgba(220, 60, 60, 0.5);
-    border-radius: 8px;
-    padding: 12px 16px;
-    color: #ffb3b3;
-    font-size: 14px;
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
 }
 
-.placeholder-text {
-    color: rgba(200, 220, 255, 0.55);
-    font-size: 15px;
-    text-align: center;
-    padding: 40px 0;
-    line-height: 1.7;
+.card-title span {
+  color: var(--color-accent);
 }
 
-.placeholder-text strong {
-    color: rgba(200, 220, 255, 0.85);
+.card-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-dim);
+  font-size: 16px;
+  cursor: pointer;
 }
 
-.result-card {
-    border-radius: 10px;
-    padding: 20px 24px;
-    margin-bottom: 20px;
+.card-close:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
-.highlight-card {
-    background: linear-gradient(135deg, rgba(30, 80, 160, 0.6), rgba(20, 55, 110, 0.7));
-    border: 1px solid rgba(100, 180, 255, 0.4);
-    text-align: center;
+/* ============================================================
+   Form — sections, fields, inputs.
+   ============================================================ */
+.form-section {
+  margin-bottom: 16px;
 }
 
-.result-card-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: #9dc8f0;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 10px;
+.form-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  margin-bottom: 8px;
 }
 
-.coord-display {
-    font-size: 28px;
-    font-weight: 700;
-    color: #ffffff;
-    letter-spacing: 1px;
-    font-variant-numeric: tabular-nums;
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
-.object-label {
-    margin-top: 8px;
-    font-size: 14px;
-    color: #79b8ff;
-    font-weight: 500;
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-    margin-bottom: 24px;
+.field > span {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  padding-left: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.stat-item {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(74, 144, 217, 0.2);
-    border-radius: 8px;
-    padding: 14px 16px;
-    text-align: center;
+.field input,
+.field select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.stat-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: #7eb8e8;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    margin-bottom: 6px;
+.field input:focus,
+.field select:focus {
+  background: var(--color-bg);
+  border-color: var(--color-accent);
 }
 
-.stat-value {
-    font-size: 24px;
-    font-weight: 700;
-    color: #ffffff;
-    font-variant-numeric: tabular-nums;
+.field select {
+  cursor: pointer;
+  font-family: var(--font-ui);
 }
 
-.stat-unit {
-    font-size: 11px;
-    color: rgba(200, 220, 255, 0.5);
-    margin-top: 2px;
+/* ============================================================
+   Toggle switch — real checkbox, custom visual.
+   ============================================================ */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px;
+  margin-bottom: 16px;
 }
 
-#map-container {
-    border-radius: 10px;
-    overflow: hidden;
-    border: 1px solid rgba(74, 144, 217, 0.3);
-    margin-bottom: 18px;
+.toggle-row > span {
+  font-size: 13px;
+  color: var(--color-text);
 }
 
-#drift-map {
-    width: 100%;
-    height: 340px;
+.toggle {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  cursor: pointer;
 }
 
-.action-row {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
-.copy-btn {
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(74, 144, 217, 0.4);
-    color: #9dc8f0;
-    border-radius: 6px;
-    padding: 10px 18px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background 0.18s, color 0.18s;
-    text-decoration: none;
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--color-border);
+  border-radius: 11px;
+  transition: background 0.2s;
 }
 
-.copy-btn:hover {
-    background: rgba(74, 144, 217, 0.2);
-    color: #fff;
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
 }
 
-.coming-soon {
-    text-align: center;
-    padding: 60px 32px;
+.toggle input:checked + .toggle-slider {
+  background: var(--color-accent);
 }
 
-.cs-icon {
-    font-size: 32px;
-    font-weight: 700;
-    margin-bottom: 18px;
-    color: #9dc8f0;
+.toggle input:checked + .toggle-slider::before {
+  transform: translateX(16px);
 }
 
-.coming-soon h2 {
-    font-size: 26px;
-    color: #e8f4ff;
-    margin-bottom: 12px;
+.toggle input:focus-visible + .toggle-slider {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
-.coming-soon p {
-    color: rgba(200, 220, 255, 0.7);
-    font-size: 15px;
+/* ============================================================
+   Form error — inline banner inside the card.
+   ============================================================ */
+.form-error {
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 69, 58, 0.08);
+  border: 1px solid rgba(255, 69, 58, 0.25);
+  color: #c53030;
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 
-.bottom-section {
-    margin-top: 32px;
-    text-align: left;
-    padding: 0 4px;
+.form-error.hidden {
+  display: none;
 }
 
-.version-text {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.35);
+/* ============================================================
+   Primary button — main CTA.
+   ============================================================ */
+.btn-primary {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(10, 132, 255, 0.3);
+  transition: transform 0.15s, box-shadow 0.15s;
 }
 
-#loading-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(5, 18, 38, 0.75);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    z-index: 999;
-    gap: 18px;
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 30px rgba(10, 132, 255, 0.35);
 }
 
-.spinner {
-    width: 48px;
-    height: 48px;
-    border: 4px solid rgba(74, 144, 217, 0.3);
-    border-top-color: #4a90d9;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-}
-
-.loading-text {
-    color: #9dc8f0;
-    font-size: 15px;
-    font-weight: 500;
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-@media (max-width: 700px) {
-    .banner-title {
-        font-size: 28px;
-    }
-
-    .main-heading {
-        font-size: 20px;
-    }
-
-    .retro-btn {
-        width: 160px;
-        font-size: 15px;
-    }
-
-    .form-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .form-group.span-2 {
-        grid-column: 1;
-    }
-
-    .stats-grid {
-        grid-template-columns: 1fr 1fr;
-    }
-
-    .coord-display {
-        font-size: 20px;
-    }
-
-    .panel {
-        padding: 20px 18px;
-    }
-}
-
-.tracking-toggle-container {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(74, 144, 217, 0.4);
-    border-radius: 6px;
-    padding: 10px 14px;
-    transition: all 0.18s ease;
-    cursor: pointer;
-}
-
-.tracking-toggle-container:hover {
-    background: rgba(255, 255, 255, 0.11);
-    border-color: #79b8ff;
-}
-
-.tracking-toggle-label {
-    cursor: pointer;
-    color: #ffffff;
-    font-size: 14px;
-    font-weight: 500;
-    margin-bottom: 0 !important;
-    text-transform: none !important;
-}
-
-.tracking-toggle-container input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-    accent-color: #4a90d9;
+.btn-primary:active {
+  transform: translateY(0);
 }
