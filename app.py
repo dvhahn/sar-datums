@@ -6,6 +6,7 @@ from domain.model import Coordinate, Wind, SearchObject
 from services.drift import calculate_drift
 from services.gpx import generate_gpx
 from services.kml import generate_kml
+from services.accuracy import parse_gpx_coords, compare_tracks
 
 app = Flask(__name__, static_folder='ui_ux', static_url_path='')
 CORS(app)  # Allow cross-origin requests from any frontend
@@ -180,6 +181,43 @@ def objects():
         {"id": obj.id, "name": obj.name}
         for obj in SEARCH_OBJECTS.values()
     ])
+
+
+@app.route('/api/accuracy', methods=['POST'])
+def accuracy():
+    """Compare our drift result against a reference GPX file.
+
+    Expects multipart/form-data:
+      - file: the reference GPX file (from Excel/VBA)
+      - lat, lon, start_time, end_time, wind_speed, wind_direction, object_id: same as /api/drift
+    """
+    try:
+        ref_file = request.files.get('file')
+        if ref_file is None:
+            return jsonify({"error": "No reference GPX file uploaded."}), 400
+
+        ref_gpx_content = ref_file.read().decode('utf-8')
+        ref_coords = parse_gpx_coords(ref_gpx_content)
+        if not ref_coords:
+            return jsonify({"error": "Could not parse any track points from the uploaded GPX."}), 400
+
+        start_pos = Coordinate(lat=float(request.form['lat']), lon=float(request.form['lon']))
+        start_time = datetime.fromisoformat(request.form['start_time'])
+        end_time = datetime.fromisoformat(request.form['end_time'])
+        wind = Wind(speed=float(request.form['wind_speed']), direction_deg=float(request.form['wind_direction']))
+        search_object = SEARCH_OBJECTS.get(int(request.form.get('object_id', 1)))
+
+        if search_object is None:
+            return jsonify({"error": "Invalid object_id"}), 400
+
+    except (KeyError, ValueError) as e:
+        return jsonify({"error": f"Invalid input: {str(e)}"}), 400
+
+    our_positions = calculate_drift(start_pos, start_time, end_time, wind, search_object)
+    our_coords = our_positions
+
+    result = compare_tracks(our_coords, ref_coords)
+    return jsonify(result)
 
 
 if __name__ == '__main__':
