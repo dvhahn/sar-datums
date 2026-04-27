@@ -49,19 +49,18 @@ def compare_tracks(our_coords: list[Coordinate], ref_coords: list[Coordinate]) -
             "mean_error_m": None,
             "final_error_m": None,
             "final_error_nm": None,
+            "accuracy_pct": None,
+            "ref_track_length_m": None,
             "points": []
         }
 
     final_error_m = haversine_metres(our_coords[paired - 1], ref_coords[paired - 1])
 
-    # Total track length of the reference track (sum of segment distances)
     ref_track_length_m = sum(
         haversine_metres(ref_coords[i], ref_coords[i + 1])
         for i in range(paired - 1)
     )
 
-    # Accuracy % = how close the final point is relative to total track length
-    # 100% means perfect match, lower means more deviation
     if ref_track_length_m > 0:
         accuracy_pct = max(0.0, 100.0 - (final_error_m / ref_track_length_m * 100))
     else:
