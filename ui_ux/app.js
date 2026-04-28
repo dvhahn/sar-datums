@@ -568,8 +568,8 @@ function drawRun(run) {
   map.on('mouseleave', layerId, hideTrackPopup);
 
   run.markers = [
-    makeMarker([run.startLon, run.startLat], run.color, 'start'),
-    makeMarker(coords[coords.length - 1],    run.color, 'end'),
+    makeStartMarker([run.startLon, run.startLat], run.color),
+    makeEndMarker(coords[coords.length - 1],      run.color),
   ];
 }
 
@@ -635,15 +635,30 @@ function buildPill(run) {
 
 
 // ── Markers
-function makeMarker(lngLat, color, kind) {
+// Start: small hollow disc — "trajectory entry point". Subtle, doesn't compete.
+function makeStartMarker(lngLat, color) {
   const el = document.createElement('div');
-  const size = kind === 'end' ? 14 : 12;
   el.style.cssText = `
-    width: ${size}px; height: ${size}px;
-    background: ${color};
-    border: 2.5px solid #fff;
+    width: 12px; height: 12px;
+    background: #fff;
+    border: 2.5px solid ${color};
     border-radius: 50%;
-    box-shadow: 0 2px 10px ${color}66;
+    box-shadow: 0 2px 8px ${color}55;
+  `;
+  return new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
+}
+
+// End (datum): solid disc with a pulsing ring radiating outward. Echoes the
+// "live beacon" feel of Find My / emergency locator pings, drawing the eye
+// to where SAR managers should act.
+function makeEndMarker(lngLat, color) {
+  const el = document.createElement('div');
+  el.className = 'datum-marker';
+  el.style.setProperty('--datum-color', color);
+  el.innerHTML = `
+    <div class="datum-ring"></div>
+    <div class="datum-ring datum-ring--delayed"></div>
+    <div class="datum-disc"></div>
   `;
   return new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
 }

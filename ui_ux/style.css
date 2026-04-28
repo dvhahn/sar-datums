@@ -689,6 +689,46 @@ body {
 }
 
 /* ============================================================
+   Datum marker — pulsing-ring beacon for the predicted endpoint.
+   Two staggered rings + a centred disc; --datum-color set per run.
+   ============================================================ */
+.datum-marker {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+}
+
+.datum-disc {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--datum-color);
+  box-shadow:
+    0 0 10px var(--datum-color),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.datum-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--datum-color);
+  opacity: 0;
+  animation: datum-pulse 1.8s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+}
+
+.datum-ring--delayed {
+  animation-delay: 0.9s;
+}
+
+@keyframes datum-pulse {
+  0%   { transform: scale(0.55); opacity: 0.85; }
+  70%  { opacity: 0; }
+  100% { transform: scale(2.4);  opacity: 0; }
+}
+
+/* ============================================================
    Center card — modal-style input panel.
    ============================================================ */
 .card-wrap {
