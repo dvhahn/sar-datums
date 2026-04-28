@@ -824,6 +824,13 @@ body {
 }
 
 /* ============================================================
+   Multiple-tracks radius input — appears when checkbox toggles.
+   ============================================================ */
+.multi-track-radius.hidden {
+  display: none;
+}
+
+/* ============================================================
    Form error — inline banner inside the card.
    ============================================================ */
 .form-error {
