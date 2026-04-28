@@ -704,6 +704,88 @@ body {
 }
 
 /* ============================================================
+   Click-on-map marker — small dot anchored to the clicked lat/lon
+   with an attached glass popup showing coords + distance/bearing
+   to the nearest datum. Marker stays in place across pan/zoom.
+   ============================================================ */
+.click-marker {
+  width: 12px;
+  height: 12px;
+  background: var(--color-accent);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  position: relative;
+  pointer-events: none;   /* dot itself doesn't block re-clicks on the map */
+}
+
+.click-marker-popup {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  padding: 8px 28px 8px 12px;
+
+  background: var(--color-surface);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.click-marker-coord {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text);
+  line-height: 1.35;
+}
+
+.click-marker-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-dim);
+  margin-top: 3px;
+}
+
+.click-marker-runtag {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.click-marker-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-dim);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.click-marker-close:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+/* ============================================================
    Datum marker — pulsing-ring beacon for the predicted endpoint.
    Two staggered rings + a centred disc; --datum-color set per run.
    ============================================================ */

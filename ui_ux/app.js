@@ -438,6 +438,83 @@ function hideTrackPopup() {
   map.getCanvas().style.cursor = '';
 }
 
+// ── Click on map → drop a small dot at that lat/lon with a glass popup
+// showing coords + distance/bearing to the nearest run's datum. Marker
+// stays anchored to geography across pan/zoom; persists until × or new click.
+let clickMarker = null;
+
+function haversineNm(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const phi1 = lat1 * Math.PI / 180;
+  const phi2 = lat2 * Math.PI / 180;
+  const dPhi = (lat2 - lat1) * Math.PI / 180;
+  const dLam = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLam / 2) ** 2;
+  return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))) / 1852;
+}
+
+function compassBearing(lat1, lon1, lat2, lon2) {
+  const phi1 = lat1 * Math.PI / 180;
+  const phi2 = lat2 * Math.PI / 180;
+  const dLam = (lon2 - lon1) * Math.PI / 180;
+  const y = Math.sin(dLam) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLam);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function nearestDatumFrom(lat, lon) {
+  if (!runs.length) return null;
+  let best = null;
+  let bestDist = Infinity;
+  for (const r of runs) {
+    const last = r.positions[r.positions.length - 1];
+    const d = haversineNm(lat, lon, last.lat, last.lon);
+    if (d < bestDist) {
+      bestDist = d;
+      best = {
+        runId:   r.id,
+        color:   r.color,
+        distance: d,
+        bearing: compassBearing(lat, lon, last.lat, last.lon),
+      };
+    }
+  }
+  return best;
+}
+
+map.on('click', (e) => {
+  if (clickMarker) {
+    clickMarker.remove();
+    clickMarker = null;
+  }
+
+  const lat = e.lngLat.lat;
+  const lon = e.lngLat.lng;
+  const datum = nearestDatumFrom(lat, lon);
+  const infoHtml = datum
+    ? `<div class="click-marker-info"><span class="click-marker-runtag" style="background:${datum.color}"></span>${datum.distance.toFixed(2)} NM · ${datum.bearing.toFixed(0)}° from datum</div>`
+    : '';
+
+  const el = document.createElement('div');
+  el.className = 'click-marker';
+  el.innerHTML = `
+    <div class="click-marker-popup">
+      <button class="click-marker-close" aria-label="Close">×</button>
+      <div class="click-marker-coord">${lat.toFixed(5)}°, ${lon.toFixed(5)}°</div>
+      ${infoHtml}
+    </div>
+  `;
+  el.querySelector('.click-marker-close').addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    if (clickMarker) {
+      clickMarker.remove();
+      clickMarker = null;
+    }
+  });
+
+  clickMarker = new maplibregl.Marker({ element: el }).setLngLat([lon, lat]).addTo(map);
+});
+
 function showError(msg) {
   formError.textContent = msg;
   formError.classList.remove('hidden');
@@ -538,6 +615,11 @@ function removeRun(id) {
   const layerId = `run-${id}`;
   if (map.getLayer(layerId))  map.removeLayer(layerId);
   if (map.getSource(layerId)) map.removeSource(layerId);
+  run.radiusLayers?.forEach(rid => {
+    if (map.getLayer(rid)) map.removeLayer(rid);
+  });
+  const radiusSourceId = `run-${id}-radius`;
+  if (map.getSource(radiusSourceId)) map.removeSource(radiusSourceId);
   run.satelliteLayers?.forEach(satId => {
     if (map.getLayer(satId))  map.removeLayer(satId);
     if (map.getSource(satId)) map.removeSource(satId);
@@ -552,9 +634,64 @@ function removeRun(id) {
   if (runs.length === 0) openCard();
 }
 
+// 64-point ring around (centerLon, centerLat) at radiusNm. Returned as a
+// closed coordinate ring suitable for a GeoJSON Polygon.
+function circleRingCoords(centerLon, centerLat, radiusNm, n = 64) {
+  const radiusDeg = radiusNm / 60;
+  const cosLat = Math.cos(centerLat * Math.PI / 180);
+  const ring = [];
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * 2 * Math.PI;
+    ring.push([
+      centerLon + (radiusDeg * Math.sin(a)) / cosLat,
+      centerLat +  radiusDeg * Math.cos(a),
+    ]);
+  }
+  return ring;
+}
+
+// Peter's operational heuristic from the original Excel: search radius
+// expands with the predicted drift distance, but never below 6 NM.
+function searchRadiusForDrift(driftNm) {
+  return Math.max(6, driftNm / 8 + 6);
+}
+
 function drawRun(run) {
   const coords = run.positions.map(p => [p.lon, p.lat]);
   const layerId = `run-${run.id}`;
+  const datumCoord = coords[coords.length - 1];
+
+  // ── Search-radius ring around the datum (Peter's heuristic).
+  run.searchRadiusNm = searchRadiusForDrift(run.summary.drift_distance_nm);
+  const radiusId = `run-${run.id}-radius`;
+  map.addSource(radiusId, {
+    type: 'geojson',
+    data: {
+      type: 'Feature',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [circleRingCoords(datumCoord[0], datumCoord[1], run.searchRadiusNm)],
+      },
+    },
+  });
+  map.addLayer({
+    id: radiusId,
+    type: 'fill',
+    source: radiusId,
+    paint: { 'fill-color': run.color, 'fill-opacity': 0.035 },
+  });
+  map.addLayer({
+    id: `${radiusId}-line`,
+    type: 'line',
+    source: radiusId,
+    paint: {
+      'line-color': run.color,
+      'line-width': 1.1,
+      'line-dasharray': [4, 4],
+      'line-opacity': 0.32,
+    },
+  });
+  run.radiusLayers = [radiusId, `${radiusId}-line`];
 
   // Satellites first, so the main track sits visually on top.
   run.satelliteLayers = [];
@@ -583,9 +720,10 @@ function drawRun(run) {
     run.satelliteLayers.push(satId);
   });
 
+  // Start the line empty; animate it growing from start to datum.
   map.addSource(layerId, {
     type: 'geojson',
-    data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } },
+    data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords.slice(0, 1) } },
   });
 
   map.addLayer({
@@ -602,10 +740,30 @@ function drawRun(run) {
   map.on('mousemove', layerId, e => showTrackPopup(e, run.positions, `Run ${run.id} · main`));
   map.on('mouseleave', layerId, hideTrackPopup);
 
+  animateLineDraw(layerId, coords, 1500);
+
   run.markers = [
     makeStartMarker([run.startLon, run.startLat], run.color),
     makeEndMarker(coords[coords.length - 1],      run.color),
   ];
+}
+
+// Progressively reveal a line over `durationMs` by appending coordinates.
+function animateLineDraw(layerId, fullCoords, durationMs) {
+  const start = performance.now();
+  function step(now) {
+    if (!map.getSource(layerId)) return;   // user removed the run mid-animation
+    const t = Math.min(1, (now - start) / durationMs);
+    // Ease-out cubic — fast start, slow finish, more "settling" feel.
+    const eased = 1 - Math.pow(1 - t, 3);
+    const cut = Math.max(2, Math.ceil(eased * fullCoords.length));
+    map.getSource(layerId).setData({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: fullCoords.slice(0, cut) },
+    });
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 function redrawAllRuns() {
@@ -623,6 +781,9 @@ function fitToRun(run) {
   );
   bounds.extend([run.startLon, run.startLat]);
   (run.satellites || []).forEach(sat => sat.forEach(p => bounds.extend([p.lon, p.lat])));
+  // Search radius is intentionally excluded — at SAR scale it can dwarf the
+  // actual drift, so we let the trajectory frame the view and let the radius
+  // ring spill off-screen.
   map.fitBounds(bounds, { padding: 80, duration: 800 });
 }
 
