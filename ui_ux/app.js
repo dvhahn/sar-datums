@@ -203,8 +203,41 @@ inpMultipleTracks.addEventListener('change', () => {
 });
 
 const RUN_COLORS = ['#0a84ff', '#ff9f0a', '#bf5af2', '#30d158', '#ff453a', '#64d2ff', '#ffd60a', '#ff375f'];
+const SAT_DIRECTIONS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 let runs = [];
 let runCounter = 0;
+
+// ── Hover popup: show nearest point's coords on a drift line
+const trackCoord = document.getElementById('trackCoord');
+
+function nearestPosition(positions, lng, lat) {
+  let best = positions[0];
+  let bestDist = Infinity;
+  for (const p of positions) {
+    const dlon = p.lon - lng;
+    const dlat = p.lat - lat;
+    const d = dlon * dlon + dlat * dlat;
+    if (d < bestDist) { bestDist = d; best = p; }
+  }
+  return best;
+}
+
+function showTrackPopup(e, positions, label) {
+  const p = nearestPosition(positions, e.lngLat.lng, e.lngLat.lat);
+  trackCoord.innerHTML = `
+    <div class="track-coord-coord">${p.lat.toFixed(5)}°, ${p.lon.toFixed(5)}°</div>
+    <div class="track-coord-label">${label}</div>
+  `;
+  trackCoord.style.left = e.point.x + 'px';
+  trackCoord.style.top = e.point.y + 'px';
+  trackCoord.classList.add('visible');
+  map.getCanvas().style.cursor = 'pointer';
+}
+
+function hideTrackPopup() {
+  trackCoord.classList.remove('visible');
+  map.getCanvas().style.cursor = '';
+}
 
 function showError(msg) {
   formError.textContent = msg;
@@ -346,6 +379,8 @@ function drawRun(run) {
       },
       layout: { 'line-cap': 'round', 'line-join': 'round' },
     });
+    map.on('mousemove', satId, e => showTrackPopup(e, satPositions, `Run ${run.id} · ${SAT_DIRECTIONS[idx]}`));
+    map.on('mouseleave', satId, hideTrackPopup);
     run.satelliteLayers.push(satId);
   });
 
@@ -365,6 +400,8 @@ function drawRun(run) {
     },
     layout: { 'line-cap': 'round', 'line-join': 'round' },
   });
+  map.on('mousemove', layerId, e => showTrackPopup(e, run.positions, `Run ${run.id} · main`));
+  map.on('mouseleave', layerId, hideTrackPopup);
 
   run.markers = [
     makeMarker([run.startLon, run.startLat], run.color, 'start'),
