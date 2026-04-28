@@ -12,6 +12,7 @@ const map = new maplibregl.Map({
 
 map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
 map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+map.addControl(new maplibregl.ScaleControl({ unit: 'nautical', maxWidth: 120 }), 'top-right');
 
 
 // ── Currents arrow image: bezier S-curve tail + filled head, white-on-alpha
