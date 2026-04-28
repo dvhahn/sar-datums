@@ -1,7 +1,7 @@
 import math
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
 from domain.model import Coordinate, Wind, SearchObject
 from services.drift import calculate_drift, get_currents_grid
 from services.gpx import generate_gpx
@@ -132,11 +132,12 @@ def drift():
     gpx_points = []
 
     # If reverse, move BACKWARDS in time (360s = 0.1h)
-    time_step_direction = -360 if is_reverse else 360
+    # Use timedelta on the naive datetime directly — going through .timestamp()
+    # would leak the server's local timezone into the result.
+    step_seconds = -360 if is_reverse else 360
 
     for i, pos in enumerate(positions):
-        t = start_time.timestamp() + (i * time_step_direction)
-        dt = datetime.fromtimestamp(t)
+        dt = start_time + timedelta(seconds=i * step_seconds)
 
         result_positions.append({
             "lat": round(pos.lat, 6),

@@ -28,9 +28,9 @@ def generate_gpx(positions: list[tuple[Coordinate, datetime]], name: str) -> str
     gpx.append("<trkseg>")
 
     # Loop over each position (coordinate + datetime)
+    # Times are NZ local (matches Peter's Excel and the tide DB) — no Z suffix.
     for coord, dt in positions:
-        # Format time as ISO 8601 (GPX standard)
-        time_str = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        time_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
         # Start a track point with latitude and longitude attributes
         gpx.append(f'<trkpt lat="{coord.lat}" lon="{coord.lon}">')
         # Add the time element inside the track point
