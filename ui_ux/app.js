@@ -224,12 +224,13 @@ function nearestPosition(positions, lng, lat) {
 
 function showTrackPopup(e, positions, label) {
   const p = nearestPosition(positions, e.lngLat.lng, e.lngLat.lat);
+  const screen = map.project([p.lon, p.lat]);
   trackCoord.innerHTML = `
     <div class="track-coord-coord">${p.lat.toFixed(5)}°, ${p.lon.toFixed(5)}°</div>
     <div class="track-coord-label">${label}</div>
   `;
-  trackCoord.style.left = e.point.x + 'px';
-  trackCoord.style.top = e.point.y + 'px';
+  trackCoord.style.left = screen.x + 'px';
+  trackCoord.style.top = screen.y + 'px';
   trackCoord.classList.add('visible');
   map.getCanvas().style.cursor = 'pointer';
 }
