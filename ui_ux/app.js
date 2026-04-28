@@ -14,33 +14,43 @@ map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
 map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
 
-// ── Currents arrow image: tail + filled head, points up so icon-rotate = bearing
+// ── Currents arrow image: bezier S-curve tail + filled head, white-on-alpha
+// for SDF so icon-color can tint it per-feature by speed.
 function makeArrowImage() {
-  const size = 24;
+  const size = 28;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
-  ctx.strokeStyle = '#0a84ff';
-  ctx.fillStyle = '#0a84ff';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#fff';
+  ctx.fillStyle = '#fff';
+  ctx.lineWidth = 2.4;
   ctx.lineCap = 'round';
+
+  // Wavy tail — gentle S-curve gives a flowing-water feel rather than a rigid arrow.
   ctx.beginPath();
-  ctx.moveTo(size / 2, size - 3);
-  ctx.lineTo(size / 2, 7);
+  ctx.moveTo(size / 2, size - 4);
+  ctx.bezierCurveTo(
+    size / 2 - 4, size * 0.62,
+    size / 2 + 4, size * 0.38,
+    size / 2, 9,
+  );
   ctx.stroke();
+
+  // Arrowhead
   ctx.beginPath();
   ctx.moveTo(size / 2, 2);
-  ctx.lineTo(size / 2 - 5, 9);
-  ctx.lineTo(size / 2 + 5, 9);
+  ctx.lineTo(size / 2 - 5.5, 10);
+  ctx.lineTo(size / 2 + 5.5, 10);
   ctx.closePath();
   ctx.fill();
+
   return ctx.getImageData(0, 0, size, size);
 }
 
 function ensureArrowImage() {
   if (!map.hasImage('current-arrow')) {
-    map.addImage('current-arrow', makeArrowImage());
+    map.addImage('current-arrow', makeArrowImage(), { sdf: true });
   }
 }
 map.on('load',  ensureArrowImage);
@@ -150,14 +160,40 @@ function renderCurrents(arrows) {
       ],
     },
     paint: {
-      'icon-opacity': 0.75,
+      // Speed-encoded gradient: pale cyan → blue → purple → red as currents speed up.
+      'icon-color': ['interpolate', ['linear'], ['get', 'speed'],
+        0,   '#7dd3fc',
+        0.5, '#0a84ff',
+        1.5, '#bf5af2',
+        3,   '#ff453a',
+      ],
+      'icon-opacity': 0.85,
     },
   });
+  startCurrentsPulse();
 }
 
 function hideCurrents() {
   if (map.getLayer('currents'))  map.removeLayer('currents');
   if (map.getSource('currents')) map.removeSource('currents');
+}
+
+// Subtle "alive" pulse on the currents layer: opacity sin-waves around 0.78
+// over ~4 s. Loop self-stops when the layer goes away.
+let currentsPulseT = 0;
+let currentsPulseRaf = null;
+function startCurrentsPulse() {
+  if (currentsPulseRaf !== null) return;
+  function tick() {
+    if (!map.getLayer('currents')) {
+      currentsPulseRaf = null;
+      return;
+    }
+    currentsPulseT += 0.025;
+    map.setPaintProperty('currents', 'icon-opacity', 0.78 + 0.14 * Math.sin(currentsPulseT));
+    currentsPulseRaf = requestAnimationFrame(tick);
+  }
+  currentsPulseRaf = requestAnimationFrame(tick);
 }
 
 
