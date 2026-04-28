@@ -43,6 +43,24 @@ def _calculate_distance_nm(start: Coordinate, end: Coordinate) -> float:
     return (6371000 * c) / METRES_PER_NAUTICAL_MILE
 
 
+SATELLITE_BEARINGS = (0, 45, 90, 135, 180, 225, 270, 315)
+
+
+def _offset_position(start: Coordinate, distance_nm: float, bearing_deg: float) -> Coordinate:
+    """Coordinate at a given distance and bearing from a start point.
+    Mirrors the Excel VBA flat-earth approximation in Datums.VADatums:
+        dLat = sin(45°) * radius (deg) ;  dLon = dLat / cos(lat)
+    Generalised here to any bearing.
+    """
+    radius_deg = distance_nm / 60.0
+    lat_rad = math.radians(start.lat)
+    bearing_rad = math.radians(bearing_deg)
+
+    dlat = math.cos(bearing_rad) * radius_deg
+    dlon = math.sin(bearing_rad) * radius_deg / math.cos(lat_rad)
+    return Coordinate(start.lat + dlat, start.lon + dlon)
+
+
 def _calculate_bearing(start: Coordinate, end: Coordinate) -> float:
     """Calculate initial bearing from start to end."""
     lat1 = math.radians(start.lat)
@@ -78,6 +96,8 @@ def drift():
         wind = Wind(speed=data['wind_speed'], direction_deg=data['wind_direction'])
         search_object = SEARCH_OBJECTS.get(data.get('object_id', 1))
         is_reverse = data.get('is_reverse', False)
+        multiple_tracks = data.get('multiple_tracks', False)
+        radius_nm = float(data.get('radius_nm', 0.2))
 
         if search_object is None:
             return jsonify({"error": "Invalid object_id"}), 400
@@ -93,6 +113,19 @@ def drift():
         search_object,
         is_reverse=is_reverse
     )
+
+    satellites = []
+    if multiple_tracks:
+        for bearing in SATELLITE_BEARINGS:
+            sat_start = _offset_position(start_pos, radius_nm, bearing)
+            sat_positions = calculate_drift(
+                sat_start, start_time, end_time, wind, search_object,
+                is_reverse=is_reverse,
+            )
+            satellites.append([
+                {"lat": round(p.lat, 6), "lon": round(p.lon, 6)}
+                for p in sat_positions
+            ])
 
     # Build response
     result_positions = []
@@ -129,6 +162,7 @@ def drift():
 
     return jsonify({
         "positions": result_positions,
+        "satellites": satellites,
         "gpx_url": "/api/gpx",
         "kml_url": "/api/kml",
         "summary": {

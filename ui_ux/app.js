@@ -192,12 +192,53 @@ const inpLat       = document.getElementById('inpLat');
 const inpLon       = document.getElementById('inpLon');
 const inpWindSpeed = document.getElementById('inpWindSpeed');
 const inpWindDir   = document.getElementById('inpWindDir');
-const inpReverse   = document.getElementById('inpReverse');
-const formError    = document.getElementById('formError');
+const inpReverse        = document.getElementById('inpReverse');
+const inpMultipleTracks = document.getElementById('inpMultipleTracks');
+const inpRadius         = document.getElementById('inpRadius');
+const radiusSection     = document.getElementById('radiusSection');
+const formError         = document.getElementById('formError');
+
+inpMultipleTracks.addEventListener('change', () => {
+  radiusSection.classList.toggle('hidden', !inpMultipleTracks.checked);
+});
 
 const RUN_COLORS = ['#0a84ff', '#ff9f0a', '#bf5af2', '#30d158', '#ff453a', '#64d2ff', '#ffd60a', '#ff375f'];
+const SAT_DIRECTIONS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 let runs = [];
 let runCounter = 0;
+
+// ── Hover popup: show nearest point's coords on a drift line
+const trackCoord = document.getElementById('trackCoord');
+
+function nearestPosition(positions, lng, lat) {
+  let best = positions[0];
+  let bestDist = Infinity;
+  for (const p of positions) {
+    const dlon = p.lon - lng;
+    const dlat = p.lat - lat;
+    const d = dlon * dlon + dlat * dlat;
+    if (d < bestDist) { bestDist = d; best = p; }
+  }
+  return best;
+}
+
+function showTrackPopup(e, positions, label) {
+  const p = nearestPosition(positions, e.lngLat.lng, e.lngLat.lat);
+  const screen = map.project([p.lon, p.lat]);
+  trackCoord.innerHTML = `
+    <div class="track-coord-coord">${p.lat.toFixed(5)}°, ${p.lon.toFixed(5)}°</div>
+    <div class="track-coord-label">${label}</div>
+  `;
+  trackCoord.style.left = screen.x + 'px';
+  trackCoord.style.top = screen.y + 'px';
+  trackCoord.classList.add('visible');
+  map.getCanvas().style.cursor = 'pointer';
+}
+
+function hideTrackPopup() {
+  trackCoord.classList.remove('visible');
+  map.getCanvas().style.cursor = '';
+}
 
 function showError(msg) {
   formError.textContent = msg;
@@ -230,14 +271,16 @@ btnCalculate.addEventListener('click', async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        lat:            parseFloat(inpLat.value),
-        lon:            parseFloat(inpLon.value),
-        start_time:     startTime,
-        end_time:       endTime,
-        wind_speed:     parseFloat(inpWindSpeed.value),
-        wind_direction: parseFloat(inpWindDir.value),
-        object_id:      parseInt(objectSelect.value, 10),
-        is_reverse:     isReverse,
+        lat:              parseFloat(inpLat.value),
+        lon:              parseFloat(inpLon.value),
+        start_time:       startTime,
+        end_time:         endTime,
+        wind_speed:       parseFloat(inpWindSpeed.value),
+        wind_direction:   parseFloat(inpWindDir.value),
+        object_id:        parseInt(objectSelect.value, 10),
+        is_reverse:       isReverse,
+        multiple_tracks:  inpMultipleTracks.checked,
+        radius_nm:        parseFloat(inpRadius.value),
       }),
     });
 
@@ -280,6 +323,7 @@ function addRun(data, meta) {
     id: runCounter,
     color: RUN_COLORS[(runCounter - 1) % RUN_COLORS.length],
     positions: data.positions,
+    satellites: data.satellites || [],
     summary: data.summary,
     ...meta,
   };
@@ -296,6 +340,10 @@ function removeRun(id) {
   const layerId = `run-${id}`;
   if (map.getLayer(layerId))  map.removeLayer(layerId);
   if (map.getSource(layerId)) map.removeSource(layerId);
+  run.satelliteLayers?.forEach(satId => {
+    if (map.getLayer(satId))  map.removeLayer(satId);
+    if (map.getSource(satId)) map.removeSource(satId);
+  });
   run.markers?.forEach(m => m.remove());
   URL.revokeObjectURL(run.gpxUrl);
   URL.revokeObjectURL(run.kmlUrl);
@@ -309,6 +357,33 @@ function removeRun(id) {
 function drawRun(run) {
   const coords = run.positions.map(p => [p.lon, p.lat]);
   const layerId = `run-${run.id}`;
+
+  // Satellites first, so the main track sits visually on top.
+  run.satelliteLayers = [];
+  (run.satellites || []).forEach((satPositions, idx) => {
+    if (!satPositions || satPositions.length < 2) return;
+    const satCoords = satPositions.map(p => [p.lon, p.lat]);
+    const satId = `run-${run.id}-sat-${idx}`;
+    map.addSource(satId, {
+      type: 'geojson',
+      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: satCoords } },
+    });
+    map.addLayer({
+      id: satId,
+      type: 'line',
+      source: satId,
+      paint: {
+        'line-color': run.color,
+        'line-width': 1.5,
+        'line-opacity': 0.35,
+        'line-dasharray': run.isReverse ? [2, 2] : [1],
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+    });
+    map.on('mousemove', satId, e => showTrackPopup(e, satPositions, `Run ${run.id} · ${SAT_DIRECTIONS[idx]}`));
+    map.on('mouseleave', satId, hideTrackPopup);
+    run.satelliteLayers.push(satId);
+  });
 
   map.addSource(layerId, {
     type: 'geojson',
@@ -326,6 +401,8 @@ function drawRun(run) {
     },
     layout: { 'line-cap': 'round', 'line-join': 'round' },
   });
+  map.on('mousemove', layerId, e => showTrackPopup(e, run.positions, `Run ${run.id} · main`));
+  map.on('mouseleave', layerId, hideTrackPopup);
 
   run.markers = [
     makeMarker([run.startLon, run.startLat], run.color, 'start'),
@@ -347,6 +424,7 @@ function fitToRun(run) {
     new maplibregl.LngLatBounds(coords[0], coords[0])
   );
   bounds.extend([run.startLon, run.startLat]);
+  (run.satellites || []).forEach(sat => sat.forEach(p => bounds.extend([p.lon, p.lat])));
   map.fitBounds(bounds, { padding: 80, duration: 800 });
 }
 
