@@ -131,16 +131,12 @@ function renderCurrents(arrows) {
   hideCurrents();
   if (arrows.length === 0) return;
   ensureArrowImage();
+  baseArrows = arrows;
 
-  const features = arrows.map(a => ({
-    type: 'Feature',
-    geometry: { type: 'Point', coordinates: [a.lon, a.lat] },
-    properties: { bearing: a.bearing_deg, speed: a.speed_kt },
-  }));
-
+  // Source starts empty; the animation loop populates it on the first frame.
   map.addSource('currents', {
     type: 'geojson',
-    data: { type: 'FeatureCollection', features },
+    data: { type: 'FeatureCollection', features: [] },
   });
 
   map.addLayer({
@@ -167,10 +163,11 @@ function renderCurrents(arrows) {
         1.5, '#bf5af2',
         3,   '#ff453a',
       ],
-      'icon-opacity': 0.85,
+      // Per-feature alpha — combines flow lifecycle with global breathing pulse.
+      'icon-opacity': ['get', 'fade'],
     },
   });
-  startCurrentsPulse();
+  startCurrentsAnimation();
 }
 
 function hideCurrents() {
@@ -178,22 +175,59 @@ function hideCurrents() {
   if (map.getSource('currents')) map.removeSource('currents');
 }
 
-// Subtle "alive" pulse on the currents layer: opacity sin-waves around 0.78
-// over ~4 s. Loop self-stops when the layer goes away.
-let currentsPulseT = 0;
-let currentsPulseRaf = null;
-function startCurrentsPulse() {
-  if (currentsPulseRaf !== null) return;
-  function tick() {
+// Currents animation: each arrow drifts ~60 m along its bearing over a 2 s
+// cycle (fade-in → drift → fade-out → loop), and on top a slow global pulse
+// modulates overall opacity so the whole field feels "alive". Throttled to
+// ~30 fps to keep setData costs reasonable for 100-300 arrows.
+let baseArrows = [];
+let animT = 0;
+let animRaf = null;
+let animLastTick = 0;
+
+function startCurrentsAnimation() {
+  if (animRaf !== null) return;
+
+  function tick(now) {
     if (!map.getLayer('currents')) {
-      currentsPulseRaf = null;
+      animRaf = null;
       return;
     }
-    currentsPulseT += 0.025;
-    map.setPaintProperty('currents', 'icon-opacity', 0.78 + 0.14 * Math.sin(currentsPulseT));
-    currentsPulseRaf = requestAnimationFrame(tick);
+    if (now - animLastTick >= 33) {
+      animLastTick = now;
+      animT += 0.033;
+
+      const flowPhase = (animT * 0.75) % 1;           // ~1.3 s drift cycle
+      const pulse     = 0.78 + 0.14 * Math.sin(animT * 1.6);  // ~4 s breathing
+      const driftMetres = flowPhase * 70;
+
+      let lifecycle;
+      if (flowPhase < 0.15)       lifecycle = flowPhase / 0.15;
+      else if (flowPhase > 0.85)  lifecycle = (1 - flowPhase) / 0.15;
+      else                        lifecycle = 1;
+
+      const features = baseArrows.map(a => {
+        const cosB = Math.cos(a.bearing_deg * Math.PI / 180);
+        const sinB = Math.sin(a.bearing_deg * Math.PI / 180);
+        const cosLat = Math.cos(a.lat * Math.PI / 180);
+        const dlat = (cosB * driftMetres) / 111120;
+        const dlon = (sinB * driftMetres) / (111120 * cosLat);
+        return {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [a.lon + dlon, a.lat + dlat] },
+          properties: {
+            bearing: a.bearing_deg,
+            speed:   a.speed_kt,
+            fade:    pulse * lifecycle,
+          },
+        };
+      });
+
+      const src = map.getSource('currents');
+      if (src) src.setData({ type: 'FeatureCollection', features });
+    }
+    animRaf = requestAnimationFrame(tick);
   }
-  currentsPulseRaf = requestAnimationFrame(tick);
+  animRaf = requestAnimationFrame(tick);
 }
 
 
