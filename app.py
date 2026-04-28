@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from datetime import datetime
 from domain.model import Coordinate, Wind, SearchObject
-from services.drift import calculate_drift
+from services.drift import calculate_drift, get_currents_grid
 from services.gpx import generate_gpx
 from services.kml import generate_kml
 
@@ -205,6 +205,28 @@ def kml():
         mimetype='application/vnd.google-earth.kml+xml',
         headers={'Content-Disposition': 'attachment; filename=drift_prediction.kml'}
     )
+
+
+@app.route('/api/currents')
+def currents():
+    """Sample tidal currents at a grid in the bounding box.
+    Query params: bbox=lat_min,lat_max,lon_min,lon_max  &  time=ISO8601
+    """
+    bbox_str = request.args.get('bbox', '')
+    time_str = request.args.get('time')
+    try:
+        parts = bbox_str.split(',')
+        if len(parts) != 4:
+            raise ValueError('bbox must be lat_min,lat_max,lon_min,lon_max')
+        lat_min, lat_max, lon_min, lon_max = map(float, parts)
+        if not time_str:
+            raise ValueError('time parameter is required')
+        sample_time = datetime.fromisoformat(time_str)
+    except ValueError as e:
+        return jsonify({"error": f"Invalid params: {str(e)}"}), 400
+
+    arrows = get_currents_grid(sample_time, lat_min, lat_max, lon_min, lon_max)
+    return jsonify({"arrows": arrows})
 
 
 @app.route('/api/objects')

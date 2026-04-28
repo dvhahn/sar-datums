@@ -161,11 +161,13 @@ def _find_nearest_vectors(cur, lat: float, lon: float, time_step: float):
 
     nearest_lat, nearest_lon = nearest
 
-    # Step 2: Fetch neap and spring vectors at that point for the given time_step
+    # Step 2: Fetch neap and spring vectors at that point for the given time_step.
+    # time_step column is REAL (float4); cast the float8 param so equality matches
+    # values like 0.1, 1.7 that don't round-trip identically across precisions.
     cur.execute("""
         SELECT tide_type, vx, vy
         FROM tidal_vectors
-        WHERE lat = %s AND lon = %s AND time_step = %s
+        WHERE lat = %s AND lon = %s AND time_step = %s::real
     """, (nearest_lat, nearest_lon, time_step))
 
     rows = cur.fetchall()
@@ -221,6 +223,100 @@ def get_tidal_current(cur, lat: float, lon: float, current_time: datetime, confi
     vy = neap_vy + (spring_vy - neap_vy) * rratio
 
     return CurrentVector(vx, vy)
+
+def _grid_step_for_bbox(bbox_width: float) -> float:
+    """Pick a stable grid step (degrees) from a discrete ladder based on bbox width.
+    Cells are anchored to the global (0, 0) origin so panning never reshuffles arrows;
+    only crossing a width threshold (i.e. zooming) triggers a step change.
+    """
+    for threshold, step in ((1.0, 0.04), (0.4, 0.02), (0.1, 0.01), (0.05, 0.005)):
+        if bbox_width >= threshold:
+            return step
+    return 0.0025
+
+
+def get_currents_grid(
+    sample_time: datetime,
+    lat_min: float, lat_max: float,
+    lon_min: float, lon_max: float,
+) -> list[dict]:
+    """Sample tidal currents at a grid of points within the bbox for `sample_time`.
+    Returns one entry per cell with speed (knots) and compass bearing (degrees).
+    """
+    conn = _get_db_connection()
+    cur = conn.cursor()
+    try:
+        config = _get_config(cur)
+
+        brackets = _find_bracketing_tides(cur, sample_time)
+        if brackets is None:
+            return []
+        prev_time, prev_height, next_time, next_height = brackets
+        time_step, is_ebb = _calculate_time_step(
+            sample_time, prev_time, prev_height, next_time, next_height
+        )
+        tide_range = next_height - prev_height
+        rratio = _calculate_rratio(tide_range, config, is_ebb)
+
+        width = lon_max - lon_min
+        height = lat_max - lat_min
+        if width <= 0 or height <= 0:
+            return []
+        step = _grid_step_for_bbox(max(width, height))
+
+        # Globally-anchored grid: FLOOR(coord / step) gives the same cell index for
+        # any coord regardless of bbox position, so panning yields stable points.
+        cur.execute("""
+            SELECT DISTINCT ON (
+                FLOOR(lat / %s),
+                FLOOR(lon / %s)
+            ) lat, lon
+            FROM locations
+            WHERE lat BETWEEN %s AND %s
+              AND lon BETWEEN %s AND %s
+            ORDER BY FLOOR(lat / %s), FLOOR(lon / %s), lat, lon
+        """, (
+            step, step,
+            lat_min, lat_max, lon_min, lon_max,
+            step, step,
+        ))
+        points = cur.fetchall()
+        if not points:
+            return []
+
+        # One round-trip for all neap+spring vectors at the chosen time_step.
+        values_sql = ','.join(f'({lat}, {lon})' for lat, lon in points)
+        cur.execute(f"""
+            SELECT lat, lon, tide_type, vx, vy
+            FROM tidal_vectors
+            WHERE (lat, lon) IN (VALUES {values_sql})
+              AND time_step = %s::real
+        """, (time_step,))
+
+        by_point: dict = {}
+        for lat, lon, tide_type, vx, vy in cur.fetchall():
+            entry = by_point.setdefault((float(lat), float(lon)), {})
+            entry[tide_type] = (float(vx), float(vy))
+
+        result = []
+        for (lat, lon), vectors in by_point.items():
+            neap_vx, neap_vy = vectors.get('neap', (0.0, 0.0))
+            spring_vx, spring_vy = vectors.get('spring', (0.0, 0.0))
+            vx = neap_vx + (spring_vx - neap_vx) * rratio
+            vy = neap_vy + (spring_vy - neap_vy) * rratio
+            speed_kt = math.sqrt(vx * vx + vy * vy) * 3600 / 1852
+            bearing_deg = (math.degrees(math.atan2(vx, vy)) + 360) % 360
+            result.append({
+                'lat': lat,
+                'lon': lon,
+                'speed_kt': round(speed_kt, 2),
+                'bearing_deg': round(bearing_deg, 1),
+            })
+        return result
+    finally:
+        cur.close()
+        conn.close()
+
 
 def apply_drift_step(position: Coordinate, current: CurrentVector, leeway: CurrentVector, time_delta_seconds: float, multiplier: float = 1.0) -> Coordinate:
     """Calculate new position after drifting for time_delta_seconds.

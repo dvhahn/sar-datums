@@ -210,6 +210,12 @@ body {
   background: var(--color-hover);
 }
 
+.theme-toggle.active {
+  color: var(--color-accent);
+  background: rgba(10, 132, 255, 0.12);
+  border-color: rgba(10, 132, 255, 0.35);
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.3; }

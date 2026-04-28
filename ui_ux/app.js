@@ -14,6 +14,39 @@ map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
 map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
 
+// ── Currents arrow image: tail + filled head, points up so icon-rotate = bearing
+function makeArrowImage() {
+  const size = 24;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#0a84ff';
+  ctx.fillStyle = '#0a84ff';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(size / 2, size - 3);
+  ctx.lineTo(size / 2, 7);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(size / 2, 2);
+  ctx.lineTo(size / 2 - 5, 9);
+  ctx.lineTo(size / 2 + 5, 9);
+  ctx.closePath();
+  ctx.fill();
+  return ctx.getImageData(0, 0, size, size);
+}
+
+function ensureArrowImage() {
+  if (!map.hasImage('current-arrow')) {
+    map.addImage('current-arrow', makeArrowImage());
+  }
+}
+map.on('load',  ensureArrowImage);
+map.on('style.load', ensureArrowImage);   // re-add after theme switch
+
+
 // ── Theme toggle
 const themeToggle = document.getElementById('themeToggle');
 const storedTheme = localStorage.getItem('theme');
@@ -31,6 +64,100 @@ function applyTheme(theme) {
   map.setStyle(newStyle);
   // After style change, re-draw all runs (map loses custom layers on setStyle).
   map.once('styledata', redrawAllRuns);
+}
+
+
+// ── Currents toggle
+const currentsToggle = document.getElementById('currentsToggle');
+let currentsOn = false;
+let currentsAbort = null;
+let currentsRefetchTimer = null;
+
+currentsToggle.addEventListener('click', () => {
+  currentsOn = !currentsOn;
+  currentsToggle.classList.toggle('active', currentsOn);
+  if (currentsOn) fetchCurrents();
+  else hideCurrents();
+});
+
+map.on('moveend', () => {
+  if (!currentsOn) return;
+  clearTimeout(currentsRefetchTimer);
+  currentsRefetchTimer = setTimeout(fetchCurrents, 250);
+});
+
+// Re-render currents after theme/style change (style.load wipes layers).
+map.on('style.load', () => { if (currentsOn) fetchCurrents(); });
+
+function currentsSampleTime() {
+  // Use the most recent run's start time if available; otherwise "now".
+  if (runs && runs.length > 0) {
+    const t = runs[runs.length - 1].positions[0]?.time;
+    if (t) return t;
+  }
+  const now = new Date();
+  return toLocalDatetime(now) + ':00';
+}
+
+async function fetchCurrents() {
+  if (currentsAbort) currentsAbort.abort();
+  currentsAbort = new AbortController();
+
+  const b = map.getBounds();
+  const bbox = `${b.getSouth()},${b.getNorth()},${b.getWest()},${b.getEast()}`;
+  const time = encodeURIComponent(currentsSampleTime());
+
+  try {
+    const res = await fetch(`/api/currents?bbox=${bbox}&time=${time}`, { signal: currentsAbort.signal });
+    if (!res.ok) return;
+    const data = await res.json();
+    renderCurrents(data.arrows || []);
+  } catch (err) {
+    if (err.name !== 'AbortError') console.error('currents fetch failed:', err);
+  }
+}
+
+function renderCurrents(arrows) {
+  hideCurrents();
+  if (arrows.length === 0) return;
+  ensureArrowImage();
+
+  const features = arrows.map(a => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [a.lon, a.lat] },
+    properties: { bearing: a.bearing_deg, speed: a.speed_kt },
+  }));
+
+  map.addSource('currents', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features },
+  });
+
+  map.addLayer({
+    id: 'currents',
+    type: 'symbol',
+    source: 'currents',
+    layout: {
+      'icon-image': 'current-arrow',
+      'icon-rotate': ['get', 'bearing'],
+      'icon-rotation-alignment': 'map',
+      'icon-allow-overlap': true,
+      'icon-size': ['interpolate', ['linear'], ['get', 'speed'],
+        0, 0.45,
+        0.5, 0.65,
+        1.5, 1.0,
+        3, 1.4,
+      ],
+    },
+    paint: {
+      'icon-opacity': 0.75,
+    },
+  });
+}
+
+function hideCurrents() {
+  if (map.getLayer('currents'))  map.removeLayer('currents');
+  if (map.getSource('currents')) map.removeSource('currents');
 }
 
 
