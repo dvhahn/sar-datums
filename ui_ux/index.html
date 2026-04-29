@@ -25,6 +25,7 @@
         <button class="retro-btn active-btn" id="btn-datums" onclick="showSection('datums')">SAR Datums</button>
         <button class="retro-btn" id="btn-patterns" onclick="showSection('patterns')">SAR Patterns</button>
         <button class="retro-btn" id="btn-gpx" onclick="showSection('gpx')">GPX Export</button>
+        <button class="retro-btn" id="btn-accuracy" onclick="showSection('accuracy')">Testing Accuracy</button>
     </div>
 
     <section id="section-datums" class="content-section">
@@ -160,6 +161,102 @@
         </div>
     </section>
 
+    <section id="section-accuracy" class="content-section hidden">
+        <div class="panel" id="panel-accuracy-input">
+            <h2 class="panel-title">Testing Accuracy</h2>
+            <p style="margin-bottom:16px;color:#666;">Upload a reference GPX file from Excel/VBA, enter the same inputs, and compare the results.</p>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="acc-lat">Latitude (deg)</label>
+                    <input id="acc-lat" type="number" step="0.000001" value="-36.8">
+                </div>
+                <div class="form-group">
+                    <label for="acc-lon">Longitude (deg)</label>
+                    <input id="acc-lon" type="number" step="0.000001" value="174.8">
+                </div>
+                <div class="form-group">
+                    <label for="acc-start">Start Time</label>
+                    <input id="acc-start" type="datetime-local">
+                </div>
+                <div class="form-group">
+                    <label for="acc-end">End Time</label>
+                    <input id="acc-end" type="datetime-local">
+                </div>
+                <div class="form-group">
+                    <label for="acc-wind-speed">Wind Speed (kts)</label>
+                    <input id="acc-wind-speed" type="number" min="0" max="200" value="15">
+                </div>
+                <div class="form-group">
+                    <label for="acc-wind-dir">Wind Direction (deg)</label>
+                    <input id="acc-wind-dir" type="number" min="0" max="359" value="180">
+                </div>
+                <div class="form-group span-2">
+                    <label for="acc-object">Object Type</label>
+                    <select id="acc-object"></select>
+                </div>
+                <div class="form-group span-2">
+                    <label for="acc-file">Reference GPX File (from Excel/VBA)</label>
+                    <input id="acc-file" type="file" accept=".gpx">
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button class="calc-btn" onclick="runAccuracyTest()">
+                    <span class="btn-icon">+</span> Compare Results
+                </button>
+            </div>
+
+            <div id="acc-error-msg" class="error-box hidden"></div>
+        </div>
+
+        <div class="panel" id="panel-accuracy-results">
+            <h2 class="panel-title">Accuracy Report</h2>
+            <div id="acc-results-placeholder" class="placeholder-text">
+                Upload a reference GPX and click <strong>Compare Results</strong> to see the accuracy report.
+            </div>
+            <div id="acc-results-content" class="hidden">
+                <div class="result-card highlight-card" style="margin-bottom:16px;">
+                    <div class="result-card-title">Accuracy Score</div>
+                    <div class="coord-display" id="acc-accuracy-pct">-</div>
+                    <div class="object-label">vs Excel / VBA reference track</div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Final Point Error</div>
+                        <div class="stat-value" id="acc-final-m">-</div>
+                        <div class="stat-unit">metres</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Final Point Error</div>
+                        <div class="stat-value" id="acc-final-nm">-</div>
+                        <div class="stat-unit">nautical miles</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Mean Error</div>
+                        <div class="stat-value" id="acc-mean-m">-</div>
+                        <div class="stat-unit">metres</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Max Error</div>
+                        <div class="stat-value" id="acc-max-m">-</div>
+                        <div class="stat-unit">metres</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Our Track Points</div>
+                        <div class="stat-value" id="acc-our-pts">-</div>
+                        <div class="stat-unit">samples</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Reference Track Points</div>
+                        <div class="stat-value" id="acc-ref-pts">-</div>
+                        <div class="stat-unit">samples</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <div class="bottom-section">
         <div class="version-text">Version 8.0 (This copy will expire after 01 Dec 2026.)</div>
     </div>
@@ -183,7 +280,7 @@ let map = null;
 let mapLayers = [];
 
 function showSection(name) {
-    ['datums', 'patterns', 'gpx'].forEach((sectionName) => {
+    ['datums', 'patterns', 'gpx', 'accuracy'].forEach((sectionName) => {
         document.getElementById(`section-${sectionName}`).classList.toggle('hidden', sectionName !== name);
         document.getElementById(`btn-${sectionName}`).classList.toggle('active-btn', sectionName === name);
     });
@@ -410,9 +507,77 @@ function formatNumber(value, digits = 2) {
     return value.toFixed(digits);
 }
 
+async function runAccuracyTest() {
+    const errorBox = document.getElementById('acc-error-msg');
+    errorBox.classList.add('hidden');
+
+    const lat = Number.parseFloat(document.getElementById('acc-lat').value);
+    const lon = Number.parseFloat(document.getElementById('acc-lon').value);
+    const startRaw = document.getElementById('acc-start').value;
+    const endRaw = document.getElementById('acc-end').value;
+    const windSpeed = Number.parseFloat(document.getElementById('acc-wind-speed').value);
+    const windDirection = Number.parseFloat(document.getElementById('acc-wind-dir').value);
+    const objectId = Number.parseInt(document.getElementById('acc-object').value, 10);
+    const file = document.getElementById('acc-file').files[0];
+
+    if ([lat, lon, windSpeed, windDirection].some(Number.isNaN)) {
+        errorBox.textContent = 'Please fill in all numeric fields.';
+        errorBox.classList.remove('hidden');
+        return;
+    }
+    if (!startRaw || !endRaw) {
+        errorBox.textContent = 'Please select both start and end times.';
+        errorBox.classList.remove('hidden');
+        return;
+    }
+    if (!file) {
+        errorBox.textContent = 'Please upload a reference GPX file.';
+        errorBox.classList.remove('hidden');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('lat', lat);
+    formData.append('lon', lon);
+    formData.append('start_time', `${startRaw}:00`);
+    formData.append('end_time', `${endRaw}:00`);
+    formData.append('wind_speed', windSpeed);
+    formData.append('wind_direction', windDirection);
+    formData.append('object_id', objectId);
+
+    try {
+        const response = await fetch('/api/accuracy', { method: 'POST', body: formData });
+        const data = await response.json();
+
+        if (!response.ok) {
+            errorBox.textContent = data.error || 'Backend returned an error.';
+            errorBox.classList.remove('hidden');
+            return;
+        }
+
+        document.getElementById('acc-final-m').textContent = formatNumber(data.final_error_m);
+        document.getElementById('acc-final-nm').textContent = formatNumber(data.final_error_nm, 4);
+        document.getElementById('acc-mean-m').textContent = formatNumber(data.mean_error_m);
+        document.getElementById('acc-max-m').textContent = formatNumber(data.max_error_m);
+        document.getElementById('acc-our-pts').textContent = data.our_total_points ?? '-';
+        document.getElementById('acc-ref-pts').textContent = data.ref_total_points ?? '-';
+        document.getElementById('acc-accuracy-pct').textContent = data.accuracy_pct != null ? `${formatNumber(data.accuracy_pct)}%` : '-';
+
+        document.getElementById('acc-results-placeholder').classList.add('hidden');
+        document.getElementById('acc-results-content').classList.remove('hidden');
+    } catch (err) {
+        errorBox.textContent = err.message || 'Unable to reach the backend.';
+        errorBox.classList.remove('hidden');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     setDefaultTimes();
     await loadObjects();
+    renderObjects(document.getElementById('acc-object'), DEFAULT_OBJECTS);
+    document.getElementById('acc-start').value = document.getElementById('inp-start').value;
+    document.getElementById('acc-end').value = document.getElementById('inp-end').value;
 });
 </script>
 </body>

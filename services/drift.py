@@ -18,7 +18,6 @@ SPRING_FLOOD_STEPS = 62
 # DB connection settings
 DB_NAME = os.getenv("DB_NAME", "sar_datums")
 DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 
@@ -165,7 +164,7 @@ def _find_nearest_vectors(cur, lat: float, lon: float, time_step: float):
     cur.execute("""
         SELECT tide_type, vx, vy
         FROM tidal_vectors
-        WHERE lat = %s AND lon = %s AND time_step = %s
+        WHERE lat = %s AND lon = %s AND ABS(time_step - %s) < 0.001
     """, (nearest_lat, nearest_lon, time_step))
 
     rows = cur.fetchall()
@@ -244,44 +243,71 @@ def calculate_drift(start_position, start_time, end_time, wind, search_object, i
     config = _get_config(cur)
 
     leeway = calculate_leeway(wind, search_object)
+    multiplier = -1.0 if is_reverse else 1.0
 
     positions = [start_position]
     current_position = start_position
     current_time = start_time
 
-    # Decide direction of logic
-    multiplier = -1.0 if is_reverse else 1.0
-
-    # Absolute seconds for the step, but logic handles the 'while'
-    step_delta = timedelta(hours=TIME_STEP_HOURS)
-
-    # Use a condition that handles both directions
     def has_not_reached_end(current, end, reverse):
         return current < end if not reverse else current > end
 
     while has_not_reached_end(current_time, end_time, is_reverse):
-        # Determine next time step
-        if is_reverse:
-            next_time = current_time - step_delta
-            if next_time < end_time: next_time = end_time
+        # Get bracketing tides to calculate VBA-style dynamic TmPeriod
+        brackets = _find_bracketing_tides(cur, current_time)
+        if brackets is None:
+            break
+
+        prev_time, prev_height, next_time, next_height = brackets
+        tide_range = next_height - prev_height
+        is_ebb = tide_range < 0
+
+        # VBA: TmPeriod = (NxtTm - TideTm) / ColCount(Td, SpNp, 0)
+        # Determine spring or neap
+        abs_range = abs(tide_range)
+        if is_ebb:
+            neap_range = config['neap_ebb_tide_range']
+            spring_range = config['spring_ebb_tide_range']
+            neap_steps = NEAP_EBB_STEPS
+            spring_steps = SPRING_EBB_STEPS
         else:
-            next_time = current_time + step_delta
-            if next_time > end_time: next_time = end_time
+            neap_range = config['neap_flood_tide_range']
+            spring_range = config['spring_flood_tide_range']
+            neap_steps = NEAP_FLOOD_STEPS
+            spring_steps = SPRING_FLOOD_STEPS
 
-        actual_seconds = abs((next_time - current_time).total_seconds())
+        # Pick closer of spring/neap for step count (VBA: SpNp)
+        if abs(abs_range - spring_range) < abs(abs_range - neap_range):
+            col_count = spring_steps
+        else:
+            col_count = neap_steps
 
-        # Get tidal current at this position and time
+        # Dynamic step size matching VBA TmPeriod
+        tide_period_seconds = (next_time - prev_time).total_seconds()
+        tm_period_seconds = tide_period_seconds / col_count
+
+        # Advance by one TmPeriod (capped at end_time)
+        if is_reverse:
+            step_end = current_time - timedelta(seconds=tm_period_seconds)
+            if step_end < end_time:
+                step_end = end_time
+        else:
+            step_end = current_time + timedelta(seconds=tm_period_seconds)
+            if step_end > end_time:
+                step_end = end_time
+
+        actual_seconds = abs((step_end - current_time).total_seconds())
+
         tidal_current = get_tidal_current(
             cur, current_position.lat, current_position.lon, current_time, config
         )
 
-        # Apply drift step with multiplier
         current_position = apply_drift_step(
             current_position, tidal_current, leeway, actual_seconds, multiplier
         )
 
         positions.append(current_position)
-        current_time = next_time
+        current_time = step_end
 
     cur.close()
     conn.close()
