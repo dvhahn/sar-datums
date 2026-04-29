@@ -12,6 +12,9 @@ def parse_gpx_coords(gpx_content: str) -> list[Coordinate]:
     coords = []
 
     # Try track points first (<trk><trkseg><trkpt>)
+    """Parse track points from a GPX XML string. Returns list of Coordinate."""
+    root = ET.fromstring(gpx_content)
+    coords = []
     for trkpt in root.findall(f'.//{{{GPX_NS}}}trkpt'):
         lat = float(trkpt.attrib['lat'])
         lon = float(trkpt.attrib['lon'])
@@ -59,6 +62,8 @@ def compare_tracks(our_coords: list[Coordinate], ref_coords: list[Coordinate]) -
             "mean_error_m": None,
             "final_error_m": None,
             "final_error_nm": None,
+            "accuracy_pct": None,
+            "ref_track_length_m": None,
             "points": []
         }
 
