@@ -144,7 +144,7 @@ def _find_nearest_vectors(cur, lat: float, lon: float, time_step: float):
     cur.execute("""
         SELECT tide_type, vx, vy
         FROM tidal_vectors
-        WHERE lat = %s AND lon = %s AND time_step = %s
+        WHERE lat = %s AND lon = %s AND ABS(time_step - %s) < 0.001
     """, (nearest_lat, nearest_lon, time_step))
 
     rows = cur.fetchall()

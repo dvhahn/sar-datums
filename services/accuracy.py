@@ -7,6 +7,11 @@ GPX_NS = 'http://www.topografix.com/GPX/1/1'
 
 
 def parse_gpx_coords(gpx_content: str) -> list[Coordinate]:
+    """Parse track points from a GPX XML string. Supports both <trkpt> and <rtept>. Returns list of Coordinate."""
+    root = ET.fromstring(gpx_content)
+    coords = []
+
+    # Try track points first (<trk><trkseg><trkpt>)
     """Parse track points from a GPX XML string. Returns list of Coordinate."""
     root = ET.fromstring(gpx_content)
     coords = []
@@ -14,6 +19,14 @@ def parse_gpx_coords(gpx_content: str) -> list[Coordinate]:
         lat = float(trkpt.attrib['lat'])
         lon = float(trkpt.attrib['lon'])
         coords.append(Coordinate(lat, lon))
+
+    # If no track points found, try route points (<rte><rtept>)
+    if not coords:
+        for rtept in root.findall(f'.//{{{GPX_NS}}}rtept'):
+            lat = float(rtept.attrib['lat'])
+            lon = float(rtept.attrib['lon'])
+            coords.append(Coordinate(lat, lon))
+
     return coords
 
 
@@ -56,11 +69,14 @@ def compare_tracks(our_coords: list[Coordinate], ref_coords: list[Coordinate]) -
 
     final_error_m = haversine_metres(our_coords[paired - 1], ref_coords[paired - 1])
 
+    # Total track length of the reference track (sum of segment distances)
     ref_track_length_m = sum(
         haversine_metres(ref_coords[i], ref_coords[i + 1])
         for i in range(paired - 1)
     )
 
+    # Accuracy % = how close the final point is relative to total track length
+    # 100% means perfect match, lower means more deviation
     if ref_track_length_m > 0:
         accuracy_pct = max(0.0, 100.0 - (final_error_m / ref_track_length_m * 100))
     else:
