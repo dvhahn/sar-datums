@@ -1,7 +1,7 @@
 import math
 import os
 from datetime import datetime, timedelta
-import psycopg2
+from database.db_config import get_connection
 from domain.model import Coordinate, Wind, SearchObject, CurrentVector
 
 KNOTS_TO_MS = 1852 / 3600
@@ -14,27 +14,6 @@ NEAP_EBB_STEPS = 62    # columns for neap ebb phase
 NEAP_FLOOD_STEPS = 61  # columns for neap flood phase
 SPRING_EBB_STEPS = 62
 SPRING_FLOOD_STEPS = 62
-
-# DB connection settings
-DB_NAME = os.getenv("DB_NAME", "sar_datums")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-
-
-def _get_db_connection():
-    # Connect to database
-    conn_params = {
-        "dbname": DB_NAME,
-        "host": DB_HOST,
-        "port": DB_PORT,
-        "user": DB_USER
-    }
-    if DB_PASSWORD:
-        conn_params["password"] = DB_PASSWORD
-    return psycopg2.connect(**conn_params)
-
 
 def calculate_leeway(wind: Wind, search_object: SearchObject) -> CurrentVector:
     """Calculate leeway: speed of an object pushed by wind.
@@ -238,51 +217,57 @@ def apply_drift_step(position: Coordinate, current: CurrentVector, leeway: Curre
 
     return Coordinate(new_lat, new_lon)
 
-def calculate_drift(start_position, start_time, end_time, wind, search_object, is_reverse=False) -> list[Coordinate]:
-    conn = _get_db_connection()
+
+def calculate_drift(start_position, start_time, end_time, wind, search_object, is_reverse=False, target="local") -> \
+list[Coordinate]:
+    """
+    Calculate drift using either 'local' or 'aws' database.
+    """
+    # Use the helper from db_config.py
+    conn = get_connection(target=target)
     cur = conn.cursor()
-    config = _get_config(cur)
 
-    leeway = calculate_leeway(wind, search_object)
+    try:
+        config = _get_config(cur)
+        leeway = calculate_leeway(wind, search_object)
 
-    positions = [start_position]
-    current_position = start_position
-    current_time = start_time
+        positions = [start_position]
+        current_position = start_position
+        current_time = start_time
 
-    # Decide direction of logic
-    multiplier = -1.0 if is_reverse else 1.0
+        multiplier = -1.0 if is_reverse else 1.0
+        step_delta = timedelta(hours=TIME_STEP_HOURS)
 
-    # Absolute seconds for the step, but logic handles the 'while'
-    step_delta = timedelta(hours=TIME_STEP_HOURS)
+        def has_not_reached_end(current, end, reverse):
+            return current < end if not reverse else current > end
 
-    # Use a condition that handles both directions
-    def has_not_reached_end(current, end, reverse):
-        return current < end if not reverse else current > end
+        while has_not_reached_end(current_time, end_time, is_reverse):
+            if is_reverse:
+                next_time = current_time - step_delta
+                if next_time < end_time: next_time = end_time
+            else:
+                next_time = current_time + step_delta
+                if next_time > end_time: next_time = end_time
 
-    while has_not_reached_end(current_time, end_time, is_reverse):
-        # Determine next time step
-        if is_reverse:
-            next_time = current_time - step_delta
-            if next_time < end_time: next_time = end_time
-        else:
-            next_time = current_time + step_delta
-            if next_time > end_time: next_time = end_time
+            actual_seconds = abs((next_time - current_time).total_seconds())
 
-        actual_seconds = abs((next_time - current_time).total_seconds())
+            # get_tidal_current uses the 'cur' (cursor) which is now
+            # linked to whichever DB you chose (local or aws)
+            tidal_current = get_tidal_current(
+                cur, current_position.lat, current_position.lon, current_time, config
+            )
 
-        # Get tidal current at this position and time
-        tidal_current = get_tidal_current(
-            cur, current_position.lat, current_position.lon, current_time, config
-        )
+            current_position = apply_drift_step(
+                current_position, tidal_current, leeway, actual_seconds, multiplier
+            )
 
-        # Apply drift step with multiplier
-        current_position = apply_drift_step(
-            current_position, tidal_current, leeway, actual_seconds, multiplier
-        )
+            positions.append(current_position)
+            current_time = next_time
 
-        positions.append(current_position)
-        current_time = next_time
+    finally:
+        # Crucial to close connections in a finally block
+        # so they close even if the script crashes
+        cur.close()
+        conn.close()
 
-    cur.close()
-    conn.close()
     return positions
