@@ -1,4 +1,6 @@
 import math
+import os
+
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from datetime import datetime
@@ -10,6 +12,9 @@ from services.accuracy import parse_gpx_coords, compare_tracks
 
 app = Flask(__name__, static_folder='ui_ux', static_url_path='')
 CORS(app)  # Allow cross-origin requests from any frontend
+
+# Set the default database target (usually 'local' for dev, 'aws' for production)
+DEFAULT_DB_TARGET = os.getenv("DATABASE_TARGET", "local")
 
 # Search object types (from Peter's Excel - Setup sheet column N-O)
 # Each object has wind drift coefficients (a, b)
@@ -80,6 +85,8 @@ def drift():
         search_object = SEARCH_OBJECTS.get(data.get('object_id', 1))
         is_reverse = data.get('is_reverse', False)
 
+        db_target = data.get('target', DEFAULT_DB_TARGET)
+
         if search_object is None:
             return jsonify({"error": "Invalid object_id"}), 400
 
@@ -92,7 +99,8 @@ def drift():
         end_time,
         wind,
         search_object,
-        is_reverse=is_reverse
+        is_reverse=is_reverse,
+        target=db_target
     )
 
     # Build response
@@ -134,7 +142,8 @@ def drift():
         "kml_url": "/api/kml",
         "summary": {
             "object_type": search_object.name,
-            "is_reverse": is_reverse,  # Let the frontend know the mode
+            "database_used": db_target,
+            "is_reverse": is_reverse, 
             "duration_hours": round(duration_hours, 2),
             "drift_distance_nm": round(drift_distance_nm, 3),
             "drift_speed_kts": round(drift_speed_kts, 3),
@@ -142,7 +151,6 @@ def drift():
             "leeway_factor": round(leeway_factor, 3),
         }
     })
-
 
 @app.route('/api/gpx')
 def gpx():
@@ -190,6 +198,7 @@ def accuracy():
     Expects multipart/form-data:
       - file: the reference GPX file (from Excel/VBA)
       - lat, lon, start_time, end_time, wind_speed, wind_direction, object_id: same as /api/drift
+      - target: (optional) 'local' or 'aws'
     """
     try:
         ref_file = request.files.get('file')
@@ -207,19 +216,36 @@ def accuracy():
         wind = Wind(speed=float(request.form['wind_speed']), direction_deg=float(request.form['wind_direction']))
         search_object = SEARCH_OBJECTS.get(int(request.form.get('object_id', 1)))
 
+        db_target = request.form.get('target', DEFAULT_DB_TARGET)
+
         if search_object is None:
             return jsonify({"error": "Invalid object_id"}), 400
 
     except (KeyError, ValueError) as e:
         return jsonify({"error": f"Invalid input: {str(e)}"}), 400
 
-    our_positions = calculate_drift(start_pos, start_time, end_time, wind, search_object)
-    our_coords = our_positions
+    our_positions = calculate_drift(
+        start_pos,
+        start_time,
+        end_time,
+        wind,
+        search_object,
+        target=db_target
+    )
 
+    our_coords = our_positions
     result = compare_tracks(our_coords, ref_coords)
+    result['database_queried'] = db_target
+
     return jsonify(result)
 
-
 if __name__ == '__main__':
-    app.run(debug=True)
-    
+    # host='0.0.0.0' makes it accessible to the internet
+    # port=5000 is the standard Flask port
+    app.run(host='0.0.0.0', port=5000, debug=False)
+
+'''
+if __name__ == '__main__':
+    # Use debug=True for local development to get automatic restarts
+    app.run(host='localhost', port=5000, debug=True)
+'''

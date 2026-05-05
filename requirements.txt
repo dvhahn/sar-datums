@@ -5,6 +5,7 @@ flask-cors==6.0.2
 itsdangerous==2.2.0
 Jinja2==3.1.6
 MarkupSafe==3.0.3
-Werkzeug==3.1.6
 openpyxl==3.1.5
 psycopg2-binary==2.9.11
+python-dotenv==1.0.1
+Werkzeug==3.1.6
