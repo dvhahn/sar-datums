@@ -6,14 +6,15 @@ from domain.model import Coordinate, Wind, SearchObject, CurrentVector
 
 KNOTS_TO_MS = 1852 / 3600
 METRES_PER_DEGREE_LAT = 111120
-TIME_STEP_HOURS = 0.1  # 6 minutes per step
-TIME_STEP_SECONDS = TIME_STEP_HOURS * 3600  # 360 seconds
 
-# Tidal column layout (from Excel metadata B25-B30)
-NEAP_EBB_STEPS = 62    # columns for neap ebb phase
-NEAP_FLOOD_STEPS = 61  # columns for neap flood phase
-SPRING_EBB_STEPS = 62
-SPRING_FLOOD_STEPS = 62
+# Reference-cycle column counts from Peter's spreadsheet (Data!B25-B30).
+# Values reflect Excel's INT() rounding that Peter flagged in his email
+# ("rounded to 133 and 255 rather than 135 and 257"); leaving them matched
+# keeps lookups bug-compatible with the spreadsheet currently shipped to him.
+NEAP_EBB_COLS = 62
+NEAP_FLOOD_COLS = 61
+SPRING_EBB_COLS = 62
+SPRING_FLOOD_COLS = 62
 
 # DB connection settings
 DB_NAME = os.getenv("DB_NAME", "sar_datums")
@@ -84,37 +85,37 @@ def _get_config(cur):
     return {row[0]: row[1] for row in cur.fetchall()}
 
 
-def _calculate_time_step(current_time: datetime, prev_time, prev_height, next_time, next_height):
-    """Calculate which time_step column to look up in the DB.
+def _calculate_time_steps(current_time: datetime, prev_time, prev_height, next_time, next_height):
+    """Compute the Neap and Spring DB column indices (as `time_step` floats).
 
-    Determines:
-    - Ebb or flood (is the tide falling or rising?)
-    - Fraction through the current phase (TSCl)
-    - Maps to a time_step value (0.0 to 12.5)
+    Mirrors VBA VADatums where Neap and Spring lookups use *different* column
+    counts:
+        clC_neap   = round(TSCl * NeapCols(Td)) * 2 + NeapStart(Td)
+        clC_spring = round(TSCl * SpringCols(Td)) * 2 + SpringStart(Td)
+    Our parser stored both sections on a unified 0.1h-step axis, so we just
+    map each index to its time_step label.
 
-    See VBA VADatums: TSCl calculation and column mapping.
+    Returns (neap_time_step, spring_time_step, is_ebb, ts_fraction).
     """
     tide_range = next_height - prev_height
     is_ebb = tide_range < 0  # Falling tide = ebb (high water -> low water)
 
-    # Fraction through the current ebb/flood phase (0.0 to 1.0)
     total_period = (next_time - prev_time).total_seconds()
     elapsed = (current_time - prev_time).total_seconds()
     ts_fraction = elapsed / total_period if total_period > 0 else 0
     ts_fraction = max(0.0, min(1.0, ts_fraction))
 
     if is_ebb:
-        # Ebb phase: maps to time_step 0.0 to ~6.1
-        step_index = round(ts_fraction * NEAP_EBB_STEPS)
-        step_index = min(step_index, NEAP_EBB_STEPS - 1)
+        neap_idx = min(round(ts_fraction * NEAP_EBB_COLS), NEAP_EBB_COLS - 1)
+        spring_idx = min(round(ts_fraction * SPRING_EBB_COLS), SPRING_EBB_COLS - 1)
     else:
-        # Flood phase: maps to time_step ~6.2 to ~12.3
-        flood_index = round(ts_fraction * NEAP_FLOOD_STEPS)
-        flood_index = min(flood_index, NEAP_FLOOD_STEPS - 1)
-        step_index = NEAP_EBB_STEPS + flood_index
+        # Flood is the second half of the cycle; offset past the ebb columns.
+        neap_idx = NEAP_EBB_COLS + min(round(ts_fraction * NEAP_FLOOD_COLS), NEAP_FLOOD_COLS - 1)
+        spring_idx = SPRING_EBB_COLS + min(round(ts_fraction * SPRING_FLOOD_COLS), SPRING_FLOOD_COLS - 1)
 
-    time_step = round(step_index * 0.1, 1)
-    return time_step, is_ebb
+    neap_time_step = round(neap_idx * 0.1, 1)
+    spring_time_step = round(spring_idx * 0.1, 1)
+    return neap_time_step, spring_time_step, is_ebb, ts_fraction
 
 
 def _calculate_rratio(tide_range: float, config: dict, is_ebb: bool):
@@ -139,19 +140,19 @@ def _calculate_rratio(tide_range: float, config: dict, is_ebb: bool):
     return max(0.0, min(1.0, rratio))  # Clamp to 0-1
 
 
-def _find_nearest_vectors(cur, lat: float, lon: float, time_step: float):
-    """Find the tidal current vectors at the nearest grid point for a given time_step.
-    Returns (neap_vx, neap_vy, spring_vx, spring_vy).
+def _find_nearest_vectors(cur, lat: float, lon: float, neap_time_step: float, spring_time_step: float):
+    """Find the tidal current vectors at the nearest grid point.
 
-    This replaces VBA's Find() function + column lookup.
-    Uses the locations table (207K rows) for fast spatial search,
-    then fetches vectors from tidal_vectors by exact lat/lon match.
+    Neap and Spring are queried at *different* time_step indices because Peter's
+    VBA picks columns separately for each section (Datums.cls computes
+    Datums.Cells(rw, clA + 3) for Neap and clA + 4 for Spring). Returns
+    (neap_vx, neap_vy, spring_vx, spring_vy).
     """
-    # Step 1: Find nearest grid point from locations table (207K rows, fast)
+    # Step 1: Find nearest grid point from locations table (207K rows, fast).
     cur.execute("""
         SELECT lat, lon
         FROM locations
-        ORDER BY location <-> ST_Point(%s, %s)::geography
+        ORDER BY location <-> ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography
         LIMIT 1
     """, (lon, lat))
 
@@ -161,21 +162,19 @@ def _find_nearest_vectors(cur, lat: float, lon: float, time_step: float):
 
     nearest_lat, nearest_lon = nearest
 
-    # Step 2: Fetch neap and spring vectors at that point for the given time_step.
-    # time_step column is REAL (float4); cast the float8 param so equality matches
-    # values like 0.1, 1.7 that don't round-trip identically across precisions.
+    # time_step column is REAL (float4); cast the float8 params so equality
+    # matches values like 0.1, 1.7 that don't round-trip across precisions.
     cur.execute("""
         SELECT tide_type, vx, vy
         FROM tidal_vectors
-        WHERE lat = %s AND lon = %s AND time_step = %s::real
-    """, (nearest_lat, nearest_lon, time_step))
-
-    rows = cur.fetchall()
+        WHERE lat = %s AND lon = %s
+          AND ((tide_type = 'neap'   AND time_step = %s::real)
+            OR (tide_type = 'spring' AND time_step = %s::real))
+    """, (nearest_lat, nearest_lon, neap_time_step, spring_time_step))
 
     neap_vx, neap_vy = 0.0, 0.0
     spring_vx, spring_vy = 0.0, 0.0
-
-    for tide_type, vx, vy in rows:
+    for tide_type, vx, vy in cur.fetchall():
         if tide_type == 'neap':
             neap_vx, neap_vy = vx, vy
         elif tide_type == 'spring':
@@ -203,8 +202,8 @@ def get_tidal_current(cur, lat: float, lon: float, current_time: datetime, confi
 
     prev_time, prev_height, next_time, next_height = brackets
 
-    # Step 2: Calculate time_step
-    time_step, is_ebb = _calculate_time_step(
+    # Step 2: Calculate Neap and Spring time_steps separately.
+    neap_ts, spring_ts, is_ebb, _ = _calculate_time_steps(
         current_time, prev_time, prev_height, next_time, next_height
     )
 
@@ -212,9 +211,9 @@ def get_tidal_current(cur, lat: float, lon: float, current_time: datetime, confi
     tide_range = next_height - prev_height
     rratio = _calculate_rratio(tide_range, config, is_ebb)
 
-    # Step 4: Find nearest vectors
+    # Step 4: Find nearest vectors (Neap and Spring use different time_steps).
     neap_vx, neap_vy, spring_vx, spring_vy = _find_nearest_vectors(
-        cur, lat, lon, time_step
+        cur, lat, lon, neap_ts, spring_ts
     )
 
     # Step 5: Interpolate between Neap and Spring
@@ -252,7 +251,7 @@ def get_currents_grid(
         if brackets is None:
             return []
         prev_time, prev_height, next_time, next_height = brackets
-        time_step, is_ebb = _calculate_time_step(
+        neap_ts, spring_ts, is_ebb, _ = _calculate_time_steps(
             sample_time, prev_time, prev_height, next_time, next_height
         )
         tide_range = next_height - prev_height
@@ -284,14 +283,17 @@ def get_currents_grid(
         if not points:
             return []
 
-        # One round-trip for all neap+spring vectors at the chosen time_step.
+        # One round-trip for all neap+spring vectors. Neap and Spring use
+        # different time_step indices (Peter's VBA picks columns separately
+        # for each), so the WHERE clause filters per tide_type.
         values_sql = ','.join(f'({lat}, {lon})' for lat, lon in points)
         cur.execute(f"""
             SELECT lat, lon, tide_type, vx, vy
             FROM tidal_vectors
             WHERE (lat, lon) IN (VALUES {values_sql})
-              AND time_step = %s::real
-        """, (time_step,))
+              AND ((tide_type = 'neap'   AND time_step = %s::real)
+                OR (tide_type = 'spring' AND time_step = %s::real))
+        """, (neap_ts, spring_ts))
 
         by_point: dict = {}
         for lat, lon, tide_type, vx, vy in cur.fetchall():
@@ -334,51 +336,83 @@ def apply_drift_step(position: Coordinate, current: CurrentVector, leeway: Curre
 
     return Coordinate(new_lat, new_lon)
 
-def calculate_drift(start_position, start_time, end_time, wind, search_object, is_reverse=False) -> list[Coordinate]:
+def calculate_drift(start_position, start_time, end_time, wind, search_object, is_reverse=False):
+    """Walk a drifting object forward (or backward) in time.
+
+    Step length adapts to the current ebb/flood cycle, mirroring Peter's VBA
+    `TmPeriod = (NxtTm - TideTm) / ColCount(...)`. Each iteration advances by
+    one reference column's worth of the *current* cycle, so a longer cycle
+    produces longer steps. Steps also snap to cycle boundaries and end_time so
+    Neap/Spring lookups always reference a single cycle.
+
+    Returns (positions, timestamps) — same length, parallel lists. Timestamps
+    are no longer uniform 0.1h, so callers must use them directly instead of
+    assuming a fixed cadence.
+    """
     conn = _get_db_connection()
     cur = conn.cursor()
-    config = _get_config(cur)
+    try:
+        config = _get_config(cur)
+        leeway = calculate_leeway(wind, search_object)
 
-    leeway = calculate_leeway(wind, search_object)
+        positions = [start_position]
+        timestamps = [start_time]
+        current_position = start_position
+        current_time = start_time
 
-    positions = [start_position]
-    current_position = start_position
-    current_time = start_time
+        sign = -1 if is_reverse else 1
+        multiplier = float(sign)
 
-    # Decide direction of logic
-    multiplier = -1.0 if is_reverse else 1.0
+        # Safety: bound iterations so a degenerate cycle can't spin forever.
+        MAX_ITERS = 5000
+        for _ in range(MAX_ITERS):
+            if sign > 0 and current_time >= end_time:
+                break
+            if sign < 0 and current_time <= end_time:
+                break
 
-    # Absolute seconds for the step, but logic handles the 'while'
-    step_delta = timedelta(hours=TIME_STEP_HOURS)
+            brackets = _find_bracketing_tides(cur, current_time)
+            if brackets is None:
+                break
+            prev_time, prev_height, next_time, next_height = brackets
 
-    # Use a condition that handles both directions
-    def has_not_reached_end(current, end, reverse):
-        return current < end if not reverse else current > end
+            is_ebb = (next_height - prev_height) < 0
+            cycle_seconds = (next_time - prev_time).total_seconds()
+            # TmPeriod uses the Neap reference column count (matches VBA when
+            # SpNp picks Neap; the Spring branch differs by ~1 column in
+            # practice, well below per-step accuracy noise).
+            col_count = NEAP_EBB_COLS if is_ebb else NEAP_FLOOD_COLS
+            tm_period_seconds = cycle_seconds / col_count if col_count else 360
 
-    while has_not_reached_end(current_time, end_time, is_reverse):
-        # Determine next time step
-        if is_reverse:
-            next_time = current_time - step_delta
-            if next_time < end_time: next_time = end_time
-        else:
-            next_time = current_time + step_delta
-            if next_time > end_time: next_time = end_time
+            # Compute step end, capped at the cycle boundary AND the final time.
+            step_delta = timedelta(seconds=tm_period_seconds * sign)
+            next_step_time = current_time + step_delta
+            if sign > 0:
+                if next_step_time > next_time: next_step_time = next_time
+                if next_step_time > end_time:  next_step_time = end_time
+            else:
+                if next_step_time < prev_time: next_step_time = prev_time
+                if next_step_time < end_time:  next_step_time = end_time
 
-        actual_seconds = abs((next_time - current_time).total_seconds())
+            actual_seconds = abs((next_step_time - current_time).total_seconds())
+            if actual_seconds < 1:
+                # Stuck on a cycle boundary; nudge past it so the next iter
+                # picks up the new HW/LW pair.
+                current_time = current_time + timedelta(seconds=sign)
+                continue
 
-        # Get tidal current at this position and time
-        tidal_current = get_tidal_current(
-            cur, current_position.lat, current_position.lon, current_time, config
-        )
+            tidal_current = get_tidal_current(
+                cur, current_position.lat, current_position.lon, current_time, config
+            )
+            current_position = apply_drift_step(
+                current_position, tidal_current, leeway, actual_seconds, multiplier
+            )
 
-        # Apply drift step with multiplier
-        current_position = apply_drift_step(
-            current_position, tidal_current, leeway, actual_seconds, multiplier
-        )
+            positions.append(current_position)
+            timestamps.append(next_step_time)
+            current_time = next_step_time
 
-        positions.append(current_position)
-        current_time = next_time
-
-    cur.close()
-    conn.close()
-    return positions
+        return positions, timestamps
+    finally:
+        cur.close()
+        conn.close()
