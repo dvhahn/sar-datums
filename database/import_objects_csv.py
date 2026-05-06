@@ -10,24 +10,14 @@ The CSV file should have the following columns:
 import csv
 import sys
 import os
-import psycopg2
-
-DB_NAME = os.getenv("DB_NAME", "sar_datums")
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-
-
-def get_connection():
-    params = {"dbname": DB_NAME, "user": DB_USER, "host": DB_HOST, "port": DB_PORT}
-    if DB_PASSWORD:
-        params["password"] = DB_PASSWORD
-    return psycopg2.connect(**params)
+from database.db_config import get_connection
 
 
 def import_objects(csv_path):
-    conn = get_connection()
+    # --- UPDATE THIS LINE TO USE THE TARGET ---
+    target = os.getenv("DATABASE_TARGET", "local")
+    conn = get_connection(target=target)
+
     cur = conn.cursor()
     cur.execute("TRUNCATE TABLE object_types RESTART IDENTITY CASCADE")
 
@@ -36,19 +26,23 @@ def import_objects(csv_path):
         header = next(reader)
         # Find column indices (by name)
         col_indices = {name.strip(): idx for idx, name in enumerate(header)}
+        print(f"Connecting to: {target}")
         print("Column indices:", col_indices)
 
         rows = []
         for row in reader:
             if len(row) < 6:
                 continue
-            name = row[col_indices['name']].strip()
-            parent = row[col_indices['parent_name']].strip() if col_indices['parent_name'] < len(row) else ''
-            level = int(row[col_indices['level']].strip())
-            a = float(row[col_indices['coefficient_a']].strip())
-            b = float(row[col_indices['coefficient_b']].strip())
-            div = float(row[col_indices['divergence_angle']].strip())
-            rows.append((name, parent, level, a, b, div))
+            try:
+                name = row[col_indices['name']].strip()
+                parent = row[col_indices['parent_name']].strip() if col_indices['parent_name'] < len(row) else ''
+                level = int(row[col_indices['level']].strip())
+                a = float(row[col_indices['coefficient_a']].strip())
+                b = float(row[col_indices['coefficient_b']].strip())
+                div = float(row[col_indices['divergence_angle']].strip())
+                rows.append((name, parent, level, a, b, div))
+            except (ValueError, KeyError) as e:
+                print(f"Skipping malformed row: {row} ({e})")
 
     # Insert rows in two passes
     name_to_id = {}
@@ -73,8 +67,7 @@ def import_objects(csv_path):
     conn.commit()
     cur.close()
     conn.close()
-    print(f"Imported {len(rows)} objects.")
-
+    print(f"Successfully imported {len(rows)} objects to {target} database.")
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
