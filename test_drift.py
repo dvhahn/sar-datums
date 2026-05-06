@@ -23,10 +23,12 @@ print(f"  Wind:  {wind}")
 print(f"  Object: {person}")
 print()
 
-positions = calculate_drift(start, start_time, end_time, wind, person)
+positions, timestamps = calculate_drift(start, start_time, end_time, wind, person)
 
 print(f"Result: {len(positions)} positions")
 print()
-for i, pos in enumerate(positions):
-    hours = i * 0.1
-    print(f"  t={hours:.1f}h  lat={pos.lat:.6f}  lon={pos.lon:.6f}")
+for pos, dt in zip(positions, timestamps):
+    elapsed_hr = (dt - start_time).total_seconds() / 3600.0
+    print(f"  t={elapsed_hr:5.3f}h ({dt:%H:%M:%S})  lat={pos.lat:.6f}  lon={pos.lon:.6f}")
+print()
+print(f"Final position: lat={positions[-1].lat:.6f}  lon={positions[-1].lon:.6f}")

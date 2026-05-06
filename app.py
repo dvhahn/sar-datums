@@ -3,7 +3,7 @@ import os
 
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
-from datetime import datetime, timedelta
+from datetime import datetime
 from domain.model import Coordinate, Wind, SearchObject
 from services.drift import calculate_drift, get_currents_grid
 from services.gpx import generate_gpx
@@ -113,7 +113,7 @@ def drift():
     except (KeyError, ValueError) as e:
         return jsonify({"error": f"Invalid input: {str(e)}"}), 400
 
-    positions = calculate_drift(
+    positions, timestamps = calculate_drift(
         start_pos,
         start_time,
         end_time,
@@ -127,7 +127,7 @@ def drift():
     if multiple_tracks:
         for bearing in SATELLITE_BEARINGS:
             sat_start = _offset_position(start_pos, radius_nm, bearing)
-            sat_positions = calculate_drift(
+            sat_positions, _ = calculate_drift(
                 sat_start, start_time, end_time, wind, search_object,
                 is_reverse=is_reverse,
             )
@@ -136,18 +136,12 @@ def drift():
                 for p in sat_positions
             ])
 
-    # Build response
+    # Build response — timestamps come from calculate_drift now; step length is
+    # adaptive (matches Peter's TmPeriod), so we can't infer them from the index.
     result_positions = []
     gpx_points = []
 
-    # If reverse, move BACKWARDS in time (360s = 0.1h)
-    # Use timedelta on the naive datetime directly — going through .timestamp()
-    # would leak the server's local timezone into the result.
-    step_seconds = -360 if is_reverse else 360
-
-    for i, pos in enumerate(positions):
-        dt = start_time + timedelta(seconds=i * step_seconds)
-
+    for pos, dt in zip(positions, timestamps):
         result_positions.append({
             "lat": round(pos.lat, 6),
             "lon": round(pos.lon, 6),
