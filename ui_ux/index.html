@@ -1,340 +1,214 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Search and Rescue Datums - Hauraki Gulf</title>
-    <meta name="description" content="High-definition SAR tidal drift datum calculator for the Hauraki Gulf region.">
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SAR Datums</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.1.1/dist/maplibre-gl.css">
+  <script src="https://unpkg.com/maplibre-gl@4.1.1/dist/maplibre-gl.js"></script>
 </head>
 <body>
 
-<div class="app-window">
-    <div class="banner">
-        <div class="banner-title">Search and Rescue Datums</div>
-        <div class="banner-email">email: pci590@police.govt.nz</div>
+  <main id="map" aria-label="Drift prediction map"></main>
+
+  <header class="top-bar">
+    <div class="brand-pill">
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <circle cx="12" cy="12" r="3" fill="currentColor" opacity="0.5"/>
+        <line x1="12" y1="2"  x2="12" y2="6"/>
+        <line x1="12" y1="18" x2="12" y2="22"/>
+        <line x1="2"  y1="12" x2="6"  y2="12"/>
+        <line x1="18" y1="12" x2="22" y2="12"/>
+      </svg>
+      <h1 class="brand-name">SAR <span>Datums</span></h1>
     </div>
 
-    <div class="main-heading">
-        Hauraki Gulf Tidal Drift Datums.<br>(High Definition)
+    <div class="status-pill">
+      <span class="status-dot"></span>
+      Hauraki Gulf
     </div>
 
-    <div class="btn-container">
-        <button class="retro-btn active-btn" id="btn-datums" onclick="showSection('datums')">SAR Datums</button>
-        <button class="retro-btn" id="btn-patterns" onclick="showSection('patterns')">SAR Patterns</button>
-        <button class="retro-btn" id="btn-gpx" onclick="showSection('gpx')">GPX Export</button>
-        <button class="retro-btn" id="btn-accuracy" onclick="showSection('accuracy')">Testing Accuracy</button>
+    <button class="theme-toggle" id="currentsToggle" aria-label="Toggle tidal currents" title="Show tidal currents">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 8 c2 -2.5, 4 -2.5, 6 0 s 4 2.5, 6 0 s 4 -2.5, 6 0" opacity="0.55"/>
+        <path d="M2 13 c2 -2.5, 4 -2.5, 6 0 s 4 2.5, 6 0 s 4 -2.5, 6 0"/>
+        <path d="M2 18 c2 -2.5, 4 -2.5, 6 0 s 4 2.5, 6 0 s 4 -2.5, 6 0" opacity="0.55"/>
+      </svg>
+    </button>
+
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <line x1="12" y1="2"  x2="12" y2="4"/>
+        <line x1="12" y1="20" x2="12" y2="22"/>
+        <line x1="2"  y1="12" x2="4"  y2="12"/>
+        <line x1="20" y1="12" x2="22" y2="12"/>
+        <line x1="4.9" y1="4.9"  x2="6.3"  y2="6.3"/>
+        <line x1="17.7" y1="17.7" x2="19.1" y2="19.1"/>
+        <line x1="4.9"  y1="19.1" x2="6.3"  y2="17.7"/>
+        <line x1="17.7" y1="6.3"  x2="19.1" y2="4.9"/>
+      </svg>
+    </button>
+  </header>
+
+  <div class="result-pills" id="resultPills"></div>
+
+  <aside class="credit-pill" role="button" tabindex="0" aria-label="Built by Team Hammerklavier">
+    <div class="credit-expand">
+      <!-- TODO: replace placeholder names with real team members -->
+      <div class="credit-member">
+        <span class="member-role">Frontend</span>
+        <span class="member-name">Anthony Cheung</span>
+      </div>
+      <div class="credit-member">
+        <span class="member-role">Frontend</span>
+        <span class="member-name">Jack Tan</span>
+      </div>
+      <div class="credit-member">
+        <span class="member-role">Backend</span>
+        <span class="member-name">Bobby Yardley</span>
+      </div>
+      <div class="credit-member">
+        <span class="member-role">Backend</span>
+        <span class="member-name">David Hahn</span>
+      </div>
+      <div class="credit-member">
+        <span class="member-role">Database</span>
+        <span class="member-name">Eakhong Lim</span>
+      </div>
+      <div class="credit-footer">© 2026 · v0.5.0</div>
     </div>
 
-    <section id="section-datums" class="content-section">
-        <div class="panel" id="panel-input">
-            <h2 class="panel-title">Drift Input Parameters</h2>
-
-            <div class="form-grid">
-                <div class="form-group">
-                    <label for="inp-lat">Latitude (deg)</label>
-                    <input id="inp-lat" type="number" step="0.000001" value="-36.8" placeholder="-36.8">
-                </div>
-                <div class="form-group">
-                    <label for="inp-lon">Longitude (deg)</label>
-                    <input id="inp-lon" type="number" step="0.000001" value="174.8" placeholder="174.8">
-                </div>
-                <div class="form-group">
-                    <label for="inp-start">Start Time</label>
-                    <input id="inp-start" type="datetime-local">
-                </div>
-                <div class="form-group">
-                    <label for="inp-end">End Time</label>
-                    <input id="inp-end" type="datetime-local">
-                </div>
-                <div class="form-group">
-                    <label for="inp-wind-speed">Wind Speed (kts)</label>
-                    <input id="inp-wind-speed" type="number" min="0" max="200" value="15">
-                </div>
-                <div class="form-group">
-                    <label for="inp-wind-dir">Wind Direction (deg)</label>
-                    <input id="inp-wind-dir" type="number" min="0" max="359" value="180" placeholder="0 = North, 180 = South">
-                </div>
-                <div class="form-group span-2">
-                    <label for="inp-object">Object Type</label>
-                    <select id="inp-object"></select>
-                </div>
-                 <div class="form-group span-2">
-                    <label>Tracking Mode</label>
-                    <div class="tracking-toggle-container">
-                        <input type="checkbox" id="inp-reverse">
-                        <label for="inp-reverse" class="tracking-toggle-label">
-                            Reverse Track (Found Position → Origin)
-                        </label>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-actions">
-                <button class="calc-btn" id="btn-calculate" onclick="calculateDrift()">
-                    <span class="btn-icon">+</span> Calculate Datum
-                </button>
-                <button class="clear-btn" onclick="resetForm()">Clear</button>
-            </div>
-
-            <div id="error-msg" class="error-box hidden"></div>
-        </div>
-
-        <div class="panel" id="panel-results">
-            <h2 class="panel-title">Drift Results</h2>
-
-            <div id="results-placeholder" class="placeholder-text">
-                Fill in the parameters above and click <strong>Calculate Datum</strong>
-                to see the predicted drift position.
-            </div>
-
-            <div id="results-content" class="hidden">
-                <div class="result-card highlight-card">
-                    <div class="result-card-title">Predicted Datum Position</div>
-                    <div class="coord-display">
-                        <span id="res-lat">-</span> , <span id="res-lon">-</span>
-                    </div>
-                    <div id="res-object-type" class="object-label"></div>
-                </div>
-
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-label">Duration</div>
-                        <div class="stat-value" id="res-duration">-</div>
-                        <div class="stat-unit">hours</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Drift Speed</div>
-                        <div class="stat-value" id="res-drift-speed">-</div>
-                        <div class="stat-unit">knots</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Drift Distance</div>
-                        <div class="stat-value" id="res-drift-dist">-</div>
-                        <div class="stat-unit">nm</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Bearing</div>
-                        <div class="stat-value" id="res-bearing">-</div>
-                        <div class="stat-unit">degrees</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Track Points</div>
-                        <div class="stat-value" id="res-points">-</div>
-                        <div class="stat-unit">samples</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Leeway Factor</div>
-                        <div class="stat-value" id="res-leeway">-</div>
-                        <div class="stat-unit">x wind speed</div>
-                    </div>
-                </div>
-
-                <div id="map-container">
-                    <div id="drift-map"></div>
-                </div>
-
-                <div class="action-row">
-                    <button class="copy-btn" onclick="copyCoords()">Copy Datum Coordinates</button>
-                    <a id="download-gpx" class="copy-btn hidden" href="/api/gpx" download="drift_prediction.gpx">Download GPX</a>
-                    <a id="download-kml" class="copy-btn hidden" href="/api/kml" download="drift_prediction.kml">Download KML</a>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section id="section-patterns" class="content-section hidden">
-        <div class="panel coming-soon">
-            <div class="cs-icon">Search</div>
-            <h2>SAR Patterns</h2>
-            <p>Expanding-square and sector search pattern generation are not wired up yet.</p>
-        </div>
-    </section>
-
-    <section id="section-gpx" class="content-section hidden">
-        <div class="panel coming-soon">
-            <div class="cs-icon">GPX</div>
-            <h2>GPX Export</h2>
-            <p>Run a datum calculation first, then download the generated GPX track from the results panel.</p>
-        </div>
-    </section>
-
-    <section id="section-accuracy" class="content-section hidden">
-        <div class="panel" id="panel-accuracy-input">
-            <h2 class="panel-title">Testing Accuracy</h2>
-            <p style="margin-bottom:16px;color:#666;">Upload a reference GPX file from Excel/VBA, enter the same inputs, and compare the results.</p>
-
-            <div class="form-grid">
-                <div class="form-group">
-                    <label for="acc-lat">Latitude (deg)</label>
-                    <input id="acc-lat" type="number" step="0.000001" value="-36.8">
-                </div>
-                <div class="form-group">
-                    <label for="acc-lon">Longitude (deg)</label>
-                    <input id="acc-lon" type="number" step="0.000001" value="174.8">
-                </div>
-                <div class="form-group">
-                    <label for="acc-start">Start Time</label>
-                    <input id="acc-start" type="datetime-local">
-                </div>
-                <div class="form-group">
-                    <label for="acc-end">End Time</label>
-                    <input id="acc-end" type="datetime-local">
-                </div>
-                <div class="form-group">
-                    <label for="acc-wind-speed">Wind Speed (kts)</label>
-                    <input id="acc-wind-speed" type="number" min="0" max="200" value="15">
-                </div>
-                <div class="form-group">
-                    <label for="acc-wind-dir">Wind Direction (deg)</label>
-                    <input id="acc-wind-dir" type="number" min="0" max="359" value="180">
-                </div>
-                <div class="form-group span-2">
-                    <label for="acc-object">Object Type</label>
-                    <select id="acc-object"></select>
-                </div>
-                <div class="form-group span-2">
-                    <label for="acc-file">Reference GPX File (from Excel/VBA)</label>
-                    <input id="acc-file" type="file" accept=".gpx">
-                </div>
-            </div>
-
-            <div class="form-actions">
-                <button class="calc-btn" onclick="runAccuracyTest()">
-                    <span class="btn-icon">+</span> Compare Results
-                </button>
-            </div>
-
-            <div id="acc-error-msg" class="error-box hidden"></div>
-        </div>
-
-        <div class="panel" id="panel-accuracy-results">
-            <h2 class="panel-title">Accuracy Report</h2>
-            <div id="acc-results-placeholder" class="placeholder-text">
-                Upload a reference GPX and click <strong>Compare Results</strong> to see the accuracy report.
-            </div>
-            <div id="acc-results-content" class="hidden">
-                <div class="result-card highlight-card" style="margin-bottom:16px;">
-                    <div class="result-card-title">Accuracy Score</div>
-                    <div class="coord-display" id="acc-accuracy-pct">-</div>
-                    <div class="object-label">vs Excel / VBA reference track</div>
-                </div>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-label">Final Point Error</div>
-                        <div class="stat-value" id="acc-final-m">-</div>
-                        <div class="stat-unit">metres</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Final Point Error</div>
-                        <div class="stat-value" id="acc-final-nm">-</div>
-                        <div class="stat-unit">nautical miles</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Mean Error</div>
-                        <div class="stat-value" id="acc-mean-m">-</div>
-                        <div class="stat-unit">metres</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Max Error</div>
-                        <div class="stat-value" id="acc-max-m">-</div>
-                        <div class="stat-unit">metres</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Our Track Points</div>
-                        <div class="stat-value" id="acc-our-pts">-</div>
-                        <div class="stat-unit">samples</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Reference Track Points</div>
-                        <div class="stat-value" id="acc-ref-pts">-</div>
-                        <div class="stat-unit">samples</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <div class="bottom-section">
-        <div class="version-text">Version 8.0 (This copy will expire after 01 Dec 2026.)</div>
+    <div class="credit-compact">
+      <svg class="credit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="4" y="5" width="16" height="14" rx="1.5"/>
+        <line x1="9"  y1="5" x2="9"  y2="19"/>
+        <line x1="15" y1="5" x2="15" y2="19"/>
+        <rect x="7"  y="5" width="2" height="7" fill="currentColor" stroke="none"/>
+        <rect x="13" y="5" width="2" height="7" fill="currentColor" stroke="none"/>
+      </svg>
+      <div class="credit-text">
+        <span class="credit-name">Hammerklavier</span>
+        <span class="credit-sub">CS399 · Team 19</span>
+      </div>
     </div>
-</div>
+  </aside>
 
-<div id="loading-overlay" class="hidden">
-    <div class="spinner"></div>
-    <div class="loading-text">Calculating drift datum...</div>
-</div>
+  <div class="fab-anchor" id="fabAnchor" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+      <line x1="6"  y1="6"  x2="18" y2="18"/>
+      <line x1="18" y1="6"  x2="6"  y2="18"/>
+    </svg>
+  </div>
 
-<script>
-const DEFAULT_OBJECTS = [
-    { id: 1, name: 'Person in Water' },
-    { id: 2, name: 'PIW with PFD (Average)' },
-    { id: 3, name: 'Life Raft - No ballast, No canopy, No drogue' },
-    { id: 4, name: 'Person-Powered Craft - Surfboard w/ person' },
-    { id: 5, name: '55-gallon Oil Drum' }
-];
+  <button class="fab hidden" id="fab" aria-label="New calculation">
+    <svg class="fab-icon fab-icon-plus" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+      <line x1="12" y1="5"  x2="12" y2="19"/>
+      <line x1="5"  y1="12" x2="19" y2="12"/>
+    </svg>
+    <svg class="fab-icon fab-icon-target" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-linecap="round">
+      <circle class="reticle-ring" cx="12" cy="12" r="5.5" stroke-width="1" opacity="0.45"/>
+      <line class="reticle-tick" x1="12" y1="2"  x2="12" y2="5.5" stroke-width="1.75"/>
+      <line class="reticle-tick" x1="12" y1="18.5" x2="12" y2="22" stroke-width="1.75"/>
+      <line class="reticle-tick" x1="2"  y1="12" x2="5.5"  y2="12" stroke-width="1.75"/>
+      <line class="reticle-tick" x1="18.5" y1="12" x2="22" y2="12" stroke-width="1.75"/>
+      <circle class="reticle-dot" cx="12" cy="12" r="1.75" fill="currentColor" stroke="none"/>
+    </svg>
+  </button>
 
-let map = null;
-let mapLayers = [];
+  <div class="drag-coord" id="dragCoord"></div>
+  <div class="track-coord" id="trackCoord"></div>
 
-function showSection(name) {
-    ['datums', 'patterns', 'gpx', 'accuracy'].forEach((sectionName) => {
-        document.getElementById(`section-${sectionName}`).classList.toggle('hidden', sectionName !== name);
-        document.getElementById(`btn-${sectionName}`).classList.toggle('active-btn', sectionName === name);
-    });
-}
+  <div class="card-wrap" id="cardWrap">
+    <div class="card-backdrop"></div>
+    <div class="card" role="dialog" aria-labelledby="cardTitle">
+      <div class="card-header">
+        <h2 class="card-title" id="cardTitle">New <span>Drift Calculation</span></h2>
+        <button class="card-close" aria-label="Close">×</button>
+      </div>
 
-function setDefaultTimes() {
-    const now = new Date();
-    now.setSeconds(0, 0);
-    const later = new Date(now.getTime() + (3 * 60 * 60 * 1000));
+      <form class="card-form">
+        <section class="form-section">
+          <div class="form-label">Position</div>
+          <div class="form-row">
+            <label class="field">
+              <span>Lat</span>
+              <input type="number" id="inpLat" value="-36.8" step="0.000001">
+            </label>
+            <label class="field">
+              <span>Lon</span>
+              <input type="number" id="inpLon" value="174.8" step="0.000001">
+            </label>
+          </div>
+        </section>
 
-    document.getElementById('inp-start').value = toDatetimeLocal(now);
-    document.getElementById('inp-end').value = toDatetimeLocal(later);
-}
+        <section class="form-section">
+          <div class="form-label">Time</div>
+          <div class="form-row">
+            <label class="field">
+              <span>Start</span>
+              <input type="datetime-local" id="inpStart">
+            </label>
+            <label class="field">
+              <span>End</span>
+              <input type="datetime-local" id="inpEnd">
+            </label>
+          </div>
+        </section>
 
-function toDatetimeLocal(date) {
-    const pad = (value) => String(value).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+        <section class="form-section">
+          <div class="form-label">Wind</div>
+          <div class="form-row">
+            <label class="field">
+              <span>Speed (kts)</span>
+              <input type="number" id="inpWindSpeed" value="15" min="0" max="200">
+            </label>
+            <label class="field">
+              <span>Direction (°)</span>
+              <input type="number" id="inpWindDir" value="180" min="0" max="359">
+            </label>
+          </div>
+        </section>
 
-async function loadObjects() {
-    const select = document.getElementById('inp-object');
+        <section class="form-section">
+          <div class="form-label">Object</div>
+          <label class="field">
+            <select id="inpObject"></select>
+          </label>
+        </section>
 
-    try {
-        const response = await fetch('/api/objects');
-        if (!response.ok) {
-            throw new Error('Unable to load objects');
-        }
+        <div class="toggle-row">
+          <span>Reverse track</span>
+          <label class="toggle">
+            <input type="checkbox" id="inpReverse">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
 
-        const objects = await response.json();
-        renderObjects(select, objects);
-    } catch (error) {
-        renderObjects(select, DEFAULT_OBJECTS);
-    }
-}
+        <div class="toggle-row">
+          <span>Multiple tracks</span>
+          <label class="toggle">
+            <input type="checkbox" id="inpMultipleTracks">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
 
-function renderObjects(select, objects) {
-    select.innerHTML = '';
-    objects.forEach((object) => {
-        const option = document.createElement('option');
-        option.value = object.id;
-        option.textContent = `${object.id} - ${object.name}`;
-        select.appendChild(option);
-    });
-}
+        <section class="form-section multi-track-radius hidden" id="radiusSection">
+          <div class="form-label">Spread radius</div>
+          <label class="field">
+            <span>Radius (nm)</span>
+            <input type="number" id="inpRadius" value="0.2" min="0.01" step="0.01">
+          </label>
+        </section>
 
-function showError(message) {
-    const errorBox = document.getElementById('error-msg');
-    errorBox.textContent = message;
-    errorBox.classList.remove('hidden');
-}
+        <div class="form-error hidden" id="formError" role="alert"></div>
 
-function clearError() {
-    document.getElementById('error-msg').classList.add('hidden');
-}
+        <button type="button" class="btn-primary" id="btnCalculate">Calculate Datum</button>
+      </form>
+    </div>
+  </div>
 
 function setLoading(isLoading) {
     document.getElementById('loading-overlay').classList.toggle('hidden', !isLoading);
@@ -580,5 +454,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('acc-end').value = document.getElementById('inp-end').value;
 });
 </script>
+  <script src="app.js"></script>
 </body>
 </html>

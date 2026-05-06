@@ -1,9 +1,9 @@
 import math
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
 from domain.model import Coordinate, Wind, SearchObject
-from services.drift import calculate_drift
+from services.drift import calculate_drift, get_currents_grid
 from services.gpx import generate_gpx
 from services.kml import generate_kml
 from services.accuracy import parse_gpx_coords, compare_tracks
@@ -44,6 +44,24 @@ def _calculate_distance_nm(start: Coordinate, end: Coordinate) -> float:
     return (6371000 * c) / METRES_PER_NAUTICAL_MILE
 
 
+SATELLITE_BEARINGS = (0, 45, 90, 135, 180, 225, 270, 315)
+
+
+def _offset_position(start: Coordinate, distance_nm: float, bearing_deg: float) -> Coordinate:
+    """Coordinate at a given distance and bearing from a start point.
+    Mirrors the Excel VBA flat-earth approximation in Datums.VADatums:
+        dLat = sin(45°) * radius (deg) ;  dLon = dLat / cos(lat)
+    Generalised here to any bearing.
+    """
+    radius_deg = distance_nm / 60.0
+    lat_rad = math.radians(start.lat)
+    bearing_rad = math.radians(bearing_deg)
+
+    dlat = math.cos(bearing_rad) * radius_deg
+    dlon = math.sin(bearing_rad) * radius_deg / math.cos(lat_rad)
+    return Coordinate(start.lat + dlat, start.lon + dlon)
+
+
 def _calculate_bearing(start: Coordinate, end: Coordinate) -> float:
     """Calculate initial bearing from start to end."""
     lat1 = math.radians(start.lat)
@@ -79,6 +97,8 @@ def drift():
         wind = Wind(speed=data['wind_speed'], direction_deg=data['wind_direction'])
         search_object = SEARCH_OBJECTS.get(data.get('object_id', 1))
         is_reverse = data.get('is_reverse', False)
+        multiple_tracks = data.get('multiple_tracks', False)
+        radius_nm = float(data.get('radius_nm', 0.2))
 
         if search_object is None:
             return jsonify({"error": "Invalid object_id"}), 400
@@ -95,16 +115,30 @@ def drift():
         is_reverse=is_reverse
     )
 
+    satellites = []
+    if multiple_tracks:
+        for bearing in SATELLITE_BEARINGS:
+            sat_start = _offset_position(start_pos, radius_nm, bearing)
+            sat_positions = calculate_drift(
+                sat_start, start_time, end_time, wind, search_object,
+                is_reverse=is_reverse,
+            )
+            satellites.append([
+                {"lat": round(p.lat, 6), "lon": round(p.lon, 6)}
+                for p in sat_positions
+            ])
+
     # Build response
     result_positions = []
     gpx_points = []
 
     # If reverse, move BACKWARDS in time (360s = 0.1h)
-    time_step_direction = -360 if is_reverse else 360
+    # Use timedelta on the naive datetime directly — going through .timestamp()
+    # would leak the server's local timezone into the result.
+    step_seconds = -360 if is_reverse else 360
 
     for i, pos in enumerate(positions):
-        t = start_time.timestamp() + (i * time_step_direction)
-        dt = datetime.fromtimestamp(t)
+        dt = start_time + timedelta(seconds=i * step_seconds)
 
         result_positions.append({
             "lat": round(pos.lat, 6),
@@ -130,6 +164,7 @@ def drift():
 
     return jsonify({
         "positions": result_positions,
+        "satellites": satellites,
         "gpx_url": "/api/gpx",
         "kml_url": "/api/kml",
         "summary": {
@@ -172,6 +207,28 @@ def kml():
         mimetype='application/vnd.google-earth.kml+xml',
         headers={'Content-Disposition': 'attachment; filename=drift_prediction.kml'}
     )
+
+
+@app.route('/api/currents')
+def currents():
+    """Sample tidal currents at a grid in the bounding box.
+    Query params: bbox=lat_min,lat_max,lon_min,lon_max  &  time=ISO8601
+    """
+    bbox_str = request.args.get('bbox', '')
+    time_str = request.args.get('time')
+    try:
+        parts = bbox_str.split(',')
+        if len(parts) != 4:
+            raise ValueError('bbox must be lat_min,lat_max,lon_min,lon_max')
+        lat_min, lat_max, lon_min, lon_max = map(float, parts)
+        if not time_str:
+            raise ValueError('time parameter is required')
+        sample_time = datetime.fromisoformat(time_str)
+    except ValueError as e:
+        return jsonify({"error": f"Invalid params: {str(e)}"}), 400
+
+    arrows = get_currents_grid(sample_time, lat_min, lat_max, lon_min, lon_max)
+    return jsonify({"arrows": arrows})
 
 
 @app.route('/api/objects')
