@@ -5,14 +5,15 @@ from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from datetime import datetime
 from domain.model import Coordinate, Wind, SearchObject
-from services.drift import calculate_drift, get_currents_grid
-from services.gpx import generate_gpx
+from services.drift import calculate_drift, get_currents_grid, get_last_divergence_tracks
+from services.gpx import generate_gpx, generate_gpx_multi
 from services.kml import generate_kml
 from services.accuracy import parse_gpx_coords, compare_tracks
 from services.circ import generate_expanding_circle
 from services.lne import generate_creeping_line
 from services.squ import generate_expanding_square
 from services.sect import generate_sector_search
+from database.db_config import get_connection
 
 app = Flask(__name__, static_folder='ui_ux', static_url_path='')
 CORS(app)  # Allow cross-origin requests from any frontend
@@ -20,17 +21,39 @@ CORS(app)  # Allow cross-origin requests from any frontend
 # Set the default database target (usually 'local' for dev, 'aws' for production)
 DEFAULT_DB_TARGET = os.getenv("DATABASE_TARGET", "local")
 
-# Search object types (from Peter's Excel - Setup sheet column N-O)
-# Each object has wind drift coefficients (a, b)
-SEARCH_OBJECTS = {
+# Hardcoded fallback (Peter's Excel — Setup sheet column N-O). Used if the
+# object_types table isn't populated yet (e.g. fresh DB before
+# database/import_objects_csv.py has been run).
+_FALLBACK_SEARCH_OBJECTS = {
     1: SearchObject(1, "Person in Water", 0.011, 0.07),
     2: SearchObject(2, "PIW with PFD (Average)", 0.013, 0.07),
     3: SearchObject(3, "Life Raft - No ballast, No canopy, No drogue", 0.057, 0.21),
     4: SearchObject(4, "Person-Powered Craft - Surfboard w/ person", 0.02, 0),
-    5: SearchObject(5, "55-gallon Oil Drum", 0.014, 0)
-
-    # TODO: Add more from Peter's data
+    5: SearchObject(5, "55-gallon Oil Drum", 0.014, 0),
 }
+
+
+def load_search_objects():
+    """Pull the SAR object catalogue from object_types; fall back to the
+    hardcoded list if the table is missing or empty (lets the app boot in a
+    clean dev DB before import_objects_csv.py has run)."""
+    try:
+        conn = get_connection(target=DEFAULT_DB_TARGET)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, name, coefficient_a, coefficient_b, divergence_angle FROM object_types"
+        )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        if rows:
+            return {row[0]: SearchObject(row[0], row[1], row[2], row[3], row[4]) for row in rows}
+    except Exception as e:
+        print(f"[startup] object_types unavailable ({e}); using hardcoded catalogue")
+    return _FALLBACK_SEARCH_OBJECTS
+
+
+SEARCH_OBJECTS = load_search_objects()
 
 METRES_PER_NAUTICAL_MILE = 1852
 
@@ -108,6 +131,8 @@ def drift():
         is_reverse = data.get('is_reverse', False)
         multiple_tracks = data.get('multiple_tracks', False)
         radius_nm = float(data.get('radius_nm', 0.2))
+        wind_divergence = data.get('wind_divergence', False)
+        divergence_angle = data.get('divergence_angle')
 
         db_target = data.get('target', DEFAULT_DB_TARGET)
 
@@ -124,7 +149,9 @@ def drift():
         wind,
         search_object,
         is_reverse=is_reverse,
-        target=db_target
+        target=db_target,
+        wind_divergence=wind_divergence,
+        divergence_angle_override=divergence_angle,
     )
 
     satellites = []
@@ -143,7 +170,7 @@ def drift():
     # Build response — timestamps come from calculate_drift now; step length is
     # adaptive (matches Peter's TmPeriod), so we can't infer them from the index.
     result_positions = []
-    gpx_points = []
+    gpx_normal_points = []  # (Coordinate, datetime) for normal track
 
     for pos, dt in zip(positions, timestamps):
         result_positions.append({
@@ -151,12 +178,45 @@ def drift():
             "lon": round(pos.lon, 6),
             "time": dt.isoformat()
         })
-        gpx_points.append((pos, dt))
+        gpx_normal_points.append((pos, dt))
 
-    # Generate GPX and KML
-    gpx_content = generate_gpx(gpx_points, name="SAR Drift Prediction")
-    kml_content = generate_kml(gpx_points, name="SAR Drift Prediction")
+    # Divergence tracks (if enabled)
+    pos_div_positions = None
+    neg_div_positions = None
+    div_tracks = get_last_divergence_tracks()
+    if div_tracks and wind_divergence:
+        pos_div_positions = []
+        neg_div_positions = []
+        for i in range(len(div_tracks['pos_div'])):
+            # Divergence tracks share the primary track's timestamps (same loop in calculate_drift).
+            dt = timestamps[i] if i < len(timestamps) else timestamps[-1]
+            pos_div_positions.append({
+                "lat": round(div_tracks['pos_div'][i].lat, 6),
+                "lon": round(div_tracks['pos_div'][i].lon, 6),
+                "time": dt.isoformat()
+            })
+            neg_div_positions.append({
+                "lat": round(div_tracks['neg_div'][i].lat, 6),
+                "lon": round(div_tracks['neg_div'][i].lon, 6),
+                "time": dt.isoformat()
+            })
+
+    # Generate GPX (multi‑track if divergence, else single) and KML (normal track only)
+    if div_tracks and wind_divergence:
+        pos_points = [(div_tracks['pos_div'][i], timestamps[i]) for i in range(len(div_tracks['pos_div']))]
+        neg_points = [(div_tracks['neg_div'][i], timestamps[i]) for i in range(len(div_tracks['neg_div']))]
+        all_tracks = [
+            ("Normal", gpx_normal_points),
+            ("Positive Divergence", pos_points),
+            ("Negative Divergence", neg_points)
+        ]
+        gpx_content = generate_gpx_multi(all_tracks, "SAR Drift Prediction")
+    else:
+        gpx_content = generate_gpx(gpx_normal_points, name="SAR Drift Prediction")
+
     app.config['last_gpx'] = gpx_content
+
+    kml_content = generate_kml(gpx_normal_points, name="SAR Drift Prediction")
     app.config['last_kml'] = kml_content
 
     final_position = positions[-1]
@@ -171,6 +231,8 @@ def drift():
     return jsonify({
         "positions": result_positions,
         "satellites": satellites,
+        "pos_div_positions": pos_div_positions,
+        "neg_div_positions": neg_div_positions,
         "gpx_url": "/api/gpx",
         "kml_url": "/api/kml",
         "summary": {
@@ -317,6 +379,36 @@ def objects():
         {"id": obj.id, "name": obj.name}
         for obj in SEARCH_OBJECTS.values()
     ])
+
+
+@app.route('/api/object-hierarchy')
+def object_hierarchy():
+    """Tree view of object_types using parent_id (CSV-driven catalogue).
+    Returns an empty list if the table hasn't been populated yet — lets the
+    UI degrade to the flat /api/objects list without throwing 500s."""
+    try:
+        conn = get_connection(target=DEFAULT_DB_TARGET)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, name, parent_id
+            FROM object_types
+            ORDER BY display_order NULLS LAST
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[object-hierarchy] table unavailable ({e}); returning empty tree")
+        return jsonify([])
+    nodes = {row[0]: {"id": row[0], "name": row[1], "children": []} for row in rows}
+    tree = []
+    for row in rows:
+        node = nodes[row[0]]
+        if row[2] is None:
+            tree.append(node)
+        else:
+            nodes[row[2]]["children"].append(node)
+    return jsonify(tree)
 
 
 @app.route('/api/accuracy', methods=['POST'])

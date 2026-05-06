@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timedelta
 from database.db_config import get_connection
 from domain.model import Coordinate, Wind, SearchObject, CurrentVector
+_last_divergence_tracks = None
 
 KNOTS_TO_MS = 1852 / 3600
 METRES_PER_DEGREE_LAT = 111120
@@ -31,6 +32,14 @@ def calculate_leeway(wind: Wind, search_object: SearchObject) -> CurrentVector:
     vx = math.sin(math.radians(drift_direction)) * wind_speed
     vy = math.cos(math.radians(drift_direction)) * wind_speed
 
+    return CurrentVector(vx, vy)
+
+
+# Rotate a vector by a given angle in degrees (positive = clockwise).
+def rotate_vector(vec: CurrentVector, angle_deg: float) -> CurrentVector:
+    rad = math.radians(angle_deg)
+    vx = vec.vx * math.cos(rad) - vec.vy * math.sin(rad)
+    vy = vec.vx * math.sin(rad) + vec.vy * math.cos(rad)
     return CurrentVector(vx, vy)
 
 
@@ -202,6 +211,7 @@ def get_tidal_current(cur, lat: float, lon: float, current_time: datetime, confi
 
     return CurrentVector(vx, vy)
 
+
 def _grid_step_for_bbox(bbox_width: float) -> float:
     """Pick a stable grid step (degrees) from a discrete ladder based on bbox width.
     Cells are anchored to the global (0, 0) origin so panning never reshuffles arrows;
@@ -316,7 +326,17 @@ def apply_drift_step(position: Coordinate, current: CurrentVector, leeway: Curre
 
     return Coordinate(new_lat, new_lon)
 
-def calculate_drift(start_position, start_time, end_time, wind, search_object, is_reverse=False, target="local"):
+def calculate_drift(
+    start_position,
+    start_time,
+    end_time,
+    wind,
+    search_object,
+    is_reverse=False,
+    target="local",
+    wind_divergence=False,
+    divergence_angle_override=None,
+):
     """Walk a drifting object forward (or backward) in time.
 
     Step length adapts to the current ebb/flood cycle, mirroring Peter's VBA
@@ -327,74 +347,107 @@ def calculate_drift(start_position, start_time, end_time, wind, search_object, i
 
     `target` selects the DB pool ('local' or 'aws') via database.db_config.
 
+    `wind_divergence=True` runs the same drift loop with the leeway vector
+    rotated by ±divergence_angle (a SearchObject.divergence_angle override is
+    accepted explicitly). The two divergence tracks are stashed in a module-
+    level global readable via get_last_divergence_tracks(); only the primary
+    "normal" track is returned, so existing callers keep working.
+
     Returns (positions, timestamps) — same length, parallel lists. Timestamps
     are no longer uniform 0.1h, so callers must use them directly instead of
     assuming a fixed cadence.
     """
+    global _last_divergence_tracks
+
+    base_leeway = calculate_leeway(wind, search_object)
+    leeway_variants = [("normal", base_leeway)]
+    if wind_divergence:
+        angle = divergence_angle_override if divergence_angle_override is not None else search_object.divergence_angle
+        if angle != 0:
+            leeway_variants.append(("pos_div", rotate_vector(base_leeway, angle)))
+            leeway_variants.append(("neg_div", rotate_vector(base_leeway, -angle)))
+
+    sign = -1 if is_reverse else 1
+    multiplier = float(sign)
+    # Safety: bound iterations so a degenerate cycle can't spin forever.
+    MAX_ITERS = 5000
+
     conn = get_connection(target=target)
     cur = conn.cursor()
     try:
         config = _get_config(cur)
-        leeway = calculate_leeway(wind, search_object)
 
-        positions = [start_position]
-        timestamps = [start_time]
-        current_position = start_position
-        current_time = start_time
+        all_tracks = {}
+        all_timestamps = {}
+        for name, leeway in leeway_variants:
+            positions = [start_position]
+            timestamps = [start_time]
+            current_position = start_position
+            current_time = start_time
 
-        sign = -1 if is_reverse else 1
-        multiplier = float(sign)
+            for _ in range(MAX_ITERS):
+                if sign > 0 and current_time >= end_time:
+                    break
+                if sign < 0 and current_time <= end_time:
+                    break
 
-        # Safety: bound iterations so a degenerate cycle can't spin forever.
-        MAX_ITERS = 5000
-        for _ in range(MAX_ITERS):
-            if sign > 0 and current_time >= end_time:
-                break
-            if sign < 0 and current_time <= end_time:
-                break
+                brackets = _find_bracketing_tides(cur, current_time)
+                if brackets is None:
+                    break
+                prev_time, prev_height, next_time, next_height = brackets
 
-            brackets = _find_bracketing_tides(cur, current_time)
-            if brackets is None:
-                break
-            prev_time, prev_height, next_time, next_height = brackets
+                is_ebb = (next_height - prev_height) < 0
+                cycle_seconds = (next_time - prev_time).total_seconds()
+                # TmPeriod uses the Neap reference column count (matches VBA
+                # when SpNp picks Neap; the Spring branch differs by ~1
+                # column in practice, well below per-step accuracy noise).
+                col_count = NEAP_EBB_COLS if is_ebb else NEAP_FLOOD_COLS
+                tm_period_seconds = cycle_seconds / col_count if col_count else 360
 
-            is_ebb = (next_height - prev_height) < 0
-            cycle_seconds = (next_time - prev_time).total_seconds()
-            # TmPeriod uses the Neap reference column count (matches VBA when
-            # SpNp picks Neap; the Spring branch differs by ~1 column in
-            # practice, well below per-step accuracy noise).
-            col_count = NEAP_EBB_COLS if is_ebb else NEAP_FLOOD_COLS
-            tm_period_seconds = cycle_seconds / col_count if col_count else 360
+                # Compute step end, capped at the cycle boundary AND end_time.
+                step_delta = timedelta(seconds=tm_period_seconds * sign)
+                next_step_time = current_time + step_delta
+                if sign > 0:
+                    if next_step_time > next_time: next_step_time = next_time
+                    if next_step_time > end_time:  next_step_time = end_time
+                else:
+                    if next_step_time < prev_time: next_step_time = prev_time
+                    if next_step_time < end_time:  next_step_time = end_time
 
-            # Compute step end, capped at the cycle boundary AND the final time.
-            step_delta = timedelta(seconds=tm_period_seconds * sign)
-            next_step_time = current_time + step_delta
-            if sign > 0:
-                if next_step_time > next_time: next_step_time = next_time
-                if next_step_time > end_time:  next_step_time = end_time
-            else:
-                if next_step_time < prev_time: next_step_time = prev_time
-                if next_step_time < end_time:  next_step_time = end_time
+                actual_seconds = abs((next_step_time - current_time).total_seconds())
+                if actual_seconds < 1:
+                    # Stuck on a cycle boundary; nudge past so the next iter
+                    # picks up the new HW/LW pair.
+                    current_time = current_time + timedelta(seconds=sign)
+                    continue
 
-            actual_seconds = abs((next_step_time - current_time).total_seconds())
-            if actual_seconds < 1:
-                # Stuck on a cycle boundary; nudge past it so the next iter
-                # picks up the new HW/LW pair.
-                current_time = current_time + timedelta(seconds=sign)
-                continue
+                tidal_current = get_tidal_current(
+                    cur, current_position.lat, current_position.lon, current_time, config
+                )
+                current_position = apply_drift_step(
+                    current_position, tidal_current, leeway, actual_seconds, multiplier
+                )
 
-            tidal_current = get_tidal_current(
-                cur, current_position.lat, current_position.lon, current_time, config
-            )
-            current_position = apply_drift_step(
-                current_position, tidal_current, leeway, actual_seconds, multiplier
-            )
+                positions.append(current_position)
+                timestamps.append(next_step_time)
+                current_time = next_step_time
 
-            positions.append(current_position)
-            timestamps.append(next_step_time)
-            current_time = next_step_time
+            all_tracks[name] = positions
+            all_timestamps[name] = timestamps
 
-        return positions, timestamps
+        if wind_divergence and 'pos_div' in all_tracks and 'neg_div' in all_tracks:
+            _last_divergence_tracks = {
+                'pos_div': all_tracks['pos_div'],
+                'neg_div': all_tracks['neg_div'],
+            }
+        else:
+            _last_divergence_tracks = None
+
+        return all_tracks['normal'], all_timestamps['normal']
     finally:
         cur.close()
         conn.close()
+
+
+def get_last_divergence_tracks():
+    return _last_divergence_tracks
