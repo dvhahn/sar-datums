@@ -624,6 +624,7 @@ function removeRun(id) {
     if (map.getLayer(satId))  map.removeLayer(satId);
     if (map.getSource(satId)) map.removeSource(satId);
   });
+  removePatternForRun(run);
   run.markers?.forEach(m => m.remove());
   URL.revokeObjectURL(run.gpxUrl);
   URL.revokeObjectURL(run.kmlUrl);
@@ -810,6 +811,7 @@ function buildPill(run) {
       <span>${s.drift_bearing_deg}°</span>
     </div>
     <div class="pill-actions">
+      <button class="pill-btn pattern" aria-label="Search pattern">Pattern</button>
       <a class="pill-btn" href="${run.gpxUrl}" download="drift-${run.id}.gpx">GPX</a>
       <a class="pill-btn" href="${run.kmlUrl}" download="drift-${run.id}.kml">KML</a>
       <button class="pill-btn remove" aria-label="Remove">×</button>
@@ -824,6 +826,11 @@ function buildPill(run) {
   pill.querySelector('.remove').addEventListener('click', (e) => {
     e.stopPropagation();
     removeRun(run.id);
+  });
+
+  pill.querySelector('.pattern').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openPatternCard(run);
   });
 
   return pill;
@@ -857,4 +864,171 @@ function makeEndMarker(lngLat, color) {
     <div class="datum-disc"></div>
   `;
   return new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
+}
+
+
+// ── Search-pattern dialog (opens from a result-pill's "Pattern" button)
+
+const patternCardWrap   = document.getElementById('patternCardWrap');
+const patType           = document.getElementById('patType');
+const patLat            = document.getElementById('patLat');
+const patLon            = document.getElementById('patLon');
+const patDir            = document.getElementById('patDir');
+const patWidth          = document.getElementById('patWidth');
+const patLength         = document.getElementById('patLength');
+const patRadius         = document.getElementById('patRadius');
+const patSectorAngle    = document.getElementById('patSectorAngle');
+const patSweep          = document.getElementById('patSweep');
+const patError          = document.getElementById('patError');
+const btnGeneratePattern = document.getElementById('btnGeneratePattern');
+
+const patDirSection     = document.getElementById('patDirSection');
+const patBoxSection     = document.getElementById('patBoxSection');
+const patRadiusSection  = document.getElementById('patRadiusSection');
+const patSectorSection  = document.getElementById('patSectorSection');
+
+// Search-pattern lines render in a contrasting hue from the drift track so
+// the two layers read as distinct concepts.
+const PATTERN_COLOR = '#0066FF';
+
+let activePatternRunId = null;  // which run the dialog is generating for
+
+function openPatternCard(run) {
+  activePatternRunId = run.id;
+  const last = run.positions[run.positions.length - 1];
+  patLat.value = last.lat.toFixed(6);
+  patLon.value = last.lon.toFixed(6);
+
+  // Pre-fill direction with the drift bearing (Peter's heuristic in VBA).
+  const bearing = run.summary?.drift_bearing_deg;
+  if (typeof bearing === 'number' && Number.isFinite(bearing)) {
+    patDir.value = Math.round(bearing);
+  }
+
+  // Pre-fill radius using Peter's drift-scaled rule.
+  const driftNm = run.summary?.drift_distance_nm ?? 0;
+  patRadius.value = searchRadiusForDrift(driftNm).toFixed(1);
+
+  patError.classList.add('hidden');
+  patError.textContent = '';
+  syncPatternFields();
+
+  patternCardWrap.classList.remove('hidden');
+}
+
+function closePatternCard() {
+  patternCardWrap.classList.add('hidden');
+  activePatternRunId = null;
+}
+
+// Show/hide conditional sections based on the chosen pattern type. Mirrors
+// the VBA Pattern.frm Radi() routine.
+function syncPatternFields() {
+  const t = patType.value;
+  const hasDirection = t === 'creeping_line' || t === 'expanding_square' || t === 'sector';
+  const hasBox       = t === 'creeping_line' || t === 'expanding_square' || t === 'circle';
+  const hasRadius    = t === 'sector';
+  const hasSector    = t === 'sector';
+
+  patDirSection.classList.toggle('hidden',    !hasDirection);
+  patBoxSection.classList.toggle('hidden',    !hasBox);
+  patRadiusSection.classList.toggle('hidden', !hasRadius);
+  patSectorSection.classList.toggle('hidden', !hasSector);
+}
+
+patType.addEventListener('change', syncPatternFields);
+
+document.querySelectorAll('[data-close="pattern"]').forEach(el => {
+  el.addEventListener('click', closePatternCard);
+});
+
+btnGeneratePattern.addEventListener('click', async () => {
+  patError.classList.add('hidden');
+  btnGeneratePattern.disabled = true;
+  btnGeneratePattern.textContent = 'Generating…';
+
+  try {
+    const body = {
+      type: patType.value,
+      datum_lat: parseFloat(patLat.value),
+      datum_lon: parseFloat(patLon.value),
+      sweep_width_nm: parseFloat(patSweep.value),
+    };
+    if (patType.value !== 'circle') body.search_direction_deg = parseFloat(patDir.value);
+    if (patType.value === 'creeping_line' || patType.value === 'expanding_square' || patType.value === 'circle') {
+      body.search_width_nm = parseFloat(patWidth.value);
+      body.track_length_nm = parseFloat(patLength.value);
+    }
+    if (patType.value === 'sector') {
+      body.radius_nm = parseFloat(patRadius.value);
+      body.sector_angle_deg = parseFloat(patSectorAngle.value);
+    }
+
+    const res = await fetch('/api/search-pattern', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+
+    const run = runs.find(r => r.id === activePatternRunId);
+    if (run) drawPatternForRun(run, data.lines);
+
+    closePatternCard();
+  } catch (err) {
+    patError.textContent = err.message;
+    patError.classList.remove('hidden');
+  } finally {
+    btnGeneratePattern.disabled = false;
+    btnGeneratePattern.textContent = 'Generate Pattern';
+  }
+});
+
+// Draws the pattern as a dashed line layer on top of the drift track. Stored
+// against the run so removeRun() can clean it up.
+function drawPatternForRun(run, lines) {
+  removePatternForRun(run);
+
+  const sourceId = `run-${run.id}-pattern`;
+  const layerId  = sourceId;
+
+  const features = lines
+    .filter(line => line && line.length >= 2)
+    .map(line => ({
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: line.map(p => [p.lon, p.lat]),
+      },
+    }));
+
+  if (features.length === 0) return;
+
+  map.addSource(sourceId, {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features },
+  });
+  map.addLayer({
+    id: layerId,
+    type: 'line',
+    source: sourceId,
+    paint: {
+      'line-color': PATTERN_COLOR,
+      'line-width': 2,
+      'line-dasharray': [3, 2],
+      'line-opacity': 0.85,
+    },
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+  });
+
+  run.patternLayers = [layerId];
+  run.patternSources = [sourceId];
+}
+
+function removePatternForRun(run) {
+  run.patternLayers?.forEach(id => { if (map.getLayer(id))  map.removeLayer(id); });
+  run.patternSources?.forEach(id => { if (map.getSource(id)) map.removeSource(id); });
+  run.patternLayers = [];
+  run.patternSources = [];
 }

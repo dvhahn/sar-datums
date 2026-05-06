@@ -9,6 +9,10 @@ from services.drift import calculate_drift, get_currents_grid
 from services.gpx import generate_gpx
 from services.kml import generate_kml
 from services.accuracy import parse_gpx_coords, compare_tracks
+from services.circ import generate_expanding_circle
+from services.lne import generate_creeping_line
+from services.squ import generate_expanding_square
+from services.sect import generate_sector_search
 
 app = Flask(__name__, static_folder='ui_ux', static_url_path='')
 CORS(app)  # Allow cross-origin requests from any frontend
@@ -231,6 +235,79 @@ def currents():
 
     arrows = get_currents_grid(sample_time, lat_min, lat_max, lon_min, lon_max)
     return jsonify({"arrows": arrows})
+
+
+@app.route('/api/search-pattern', methods=['POST'])
+def search_pattern():
+    """Generate a SAR search pattern (creeping line / expanding square / sector / circle).
+
+    Body fields (JSON):
+        type:                 'creeping_line' | 'expanding_square' | 'sector' | 'circle'
+        datum_lat, datum_lon: centre point
+        sweep_width_nm:       track spacing in NM (used by line/square/circle)
+        search_direction_deg: required by line / square / sector
+        search_width_nm:      line / square only
+        track_length_nm:      line / square only
+        radius_nm:            sector / circle only
+        sector_angle_deg:     sector only — 30 or 120
+
+    Always returns: { "lines": [[{lat,lon}, ...], ...] }  (list of polylines).
+    """
+    try:
+        data = request.get_json(force=True) or {}
+        ptype = data['type']
+        datum = Coordinate(lat=float(data['datum_lat']), lon=float(data['datum_lon']))
+        sweep_width_nm = float(data.get('sweep_width_nm', 1.0))
+    except (KeyError, ValueError, TypeError) as e:
+        return jsonify({"error": f"Invalid input: {e}"}), 400
+
+    try:
+        if ptype == 'creeping_line':
+            pts = generate_creeping_line(
+                datum,
+                float(data['search_direction_deg']),
+                sweep_width_nm,
+                float(data['search_width_nm']),
+                float(data['track_length_nm']),
+            )
+            lines = [pts]
+        elif ptype == 'expanding_square':
+            pts = generate_expanding_square(
+                datum,
+                float(data['search_direction_deg']),
+                sweep_width_nm,
+                float(data['search_width_nm']),
+                float(data['track_length_nm']),
+            )
+            lines = [pts]
+        elif ptype == 'sector':
+            lines = generate_sector_search(
+                datum,
+                float(data['search_direction_deg']),
+                float(data['radius_nm']),
+                float(data.get('sector_angle_deg', 120)),
+            )
+        elif ptype == 'circle':
+            # Circle module takes sweep width in metres and search/track in NM.
+            pts = generate_expanding_circle(
+                datum,
+                float(data['search_width_nm']),
+                float(data['track_length_nm']),
+                sweep_width_nm * 1852.0,
+            )
+            lines = [pts]
+        else:
+            return jsonify({"error": f"Unknown pattern type: {ptype}"}), 400
+    except (KeyError, ValueError, TypeError) as e:
+        return jsonify({"error": f"Invalid input: {e}"}), 400
+
+    return jsonify({
+        "type": ptype,
+        "lines": [
+            [{"lat": round(p.lat, 6), "lon": round(p.lon, 6)} for p in line]
+            for line in lines
+        ],
+    })
 
 
 @app.route('/api/objects')

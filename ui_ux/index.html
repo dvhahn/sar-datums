@@ -210,6 +210,97 @@
     </div>
   </div>
 
+  <!-- Search Pattern dialog — opens after a drift run, pre-filled from that run -->
+  <div class="card-wrap hidden" id="patternCardWrap">
+    <div class="card-backdrop" data-close="pattern"></div>
+    <div class="card" role="dialog" aria-labelledby="patternCardTitle">
+      <div class="card-header">
+        <h2 class="card-title" id="patternCardTitle">Search <span>Pattern</span></h2>
+        <button class="card-close" data-close="pattern" aria-label="Close">×</button>
+      </div>
+
+      <form class="card-form" id="patternForm">
+        <section class="form-section">
+          <div class="form-label">Pattern</div>
+          <label class="field">
+            <select id="patType">
+              <option value="creeping_line">Creeping Line</option>
+              <option value="expanding_square">Expanding Square</option>
+              <option value="sector">Sector Search</option>
+              <option value="circle">Expanding Circle</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="form-section">
+          <div class="form-label">Datum</div>
+          <div class="form-row">
+            <label class="field">
+              <span>Lat</span>
+              <input type="number" id="patLat" step="0.000001">
+            </label>
+            <label class="field">
+              <span>Lon</span>
+              <input type="number" id="patLon" step="0.000001">
+            </label>
+          </div>
+        </section>
+
+        <section class="form-section" id="patDirSection">
+          <div class="form-label">Search direction</div>
+          <label class="field">
+            <span>Bearing (° T)</span>
+            <input type="number" id="patDir" min="0" max="359" step="1">
+          </label>
+        </section>
+
+        <section class="form-section" id="patBoxSection">
+          <div class="form-label">Search box</div>
+          <div class="form-row">
+            <label class="field">
+              <span>Width (nm)</span>
+              <input type="number" id="patWidth" value="2" min="0.1" step="0.1">
+            </label>
+            <label class="field">
+              <span>Length (nm)</span>
+              <input type="number" id="patLength" value="4" min="0.1" step="0.1">
+            </label>
+          </div>
+        </section>
+
+        <section class="form-section hidden" id="patRadiusSection">
+          <div class="form-label">Radius</div>
+          <label class="field">
+            <span>Radius (nm)</span>
+            <input type="number" id="patRadius" value="2" min="0.1" step="0.1">
+          </label>
+        </section>
+
+        <section class="form-section hidden" id="patSectorSection">
+          <div class="form-label">Sector angle</div>
+          <label class="field">
+            <select id="patSectorAngle">
+              <option value="120">120°</option>
+              <option value="30">30°</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="form-section">
+          <div class="form-label">Sweep width</div>
+          <label class="field">
+            <span>Spacing (nm)</span>
+            <input type="number" id="patSweep" value="0.5" min="0.05" step="0.05">
+          </label>
+        </section>
+
+        <div class="form-error hidden" id="patError" role="alert"></div>
+
+        <button type="button" class="btn-primary" id="btnGeneratePattern">Generate Pattern</button>
+      </form>
+    </div>
+  </div>
+
 function setLoading(isLoading) {
     document.getElementById('loading-overlay').classList.toggle('hidden', !isLoading);
     document.getElementById('btn-calculate').disabled = isLoading;
