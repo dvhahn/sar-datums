@@ -63,9 +63,12 @@ def _pat_prep_square(
     end3 = end1_base  # saved as rwA+16/17
     end1 = Coordinate(end1_base.lat - b_val, end1_base.lon - (a_val / conv))  # rwA+12/13
 
-    # Perpendicular step offsets (45 degrees for expanding square, rwA+18..21)
-    # PatPrep loops B=1,2 with k=45 and l=sqrt(2*sw^2)
-    l = math.sqrt(2 * (sw ** 2))
+    # Perpendicular step offsets (45 degrees for expanding square, rwA+18..21).
+    # VBA does `sw = sw / 60` (NM → minutes-of-latitude i.e. degrees) right
+    # here before the step computation; we mirror that with sw_deg so the
+    # offsets land on a degree scale instead of NM.
+    sw_deg = sw / 60
+    l = math.sqrt(2 * (sw_deg ** 2))
     steps = []
     sign = 1
     for b_iter in range(1, 3):

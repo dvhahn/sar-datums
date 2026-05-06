@@ -51,15 +51,19 @@ def _pat_prep_line(
     end1 = Coordinate(datum.lat + y, datum.lon + (x / conv))
     end2 = Coordinate(datum.lat - y, datum.lon - (x / conv))
 
-    # Lateral step offsets perpendicular to track (rwA+18, rwA+19)
+    # Lateral step offsets perpendicular to track (rwA+18, rwA+19).
+    # VBA does `sw = sw / 60` (NM → minutes-of-latitude i.e. degrees) right
+    # here before the step computation; we mirror that with sw_deg so the
+    # offsets land on a degree scale instead of NM.
+    sw_deg = sw / 60
     th2 = th + 90
     radian_th2 = th2 * radian
     if int(th2 / 180) == th2 / 180:
         step_x = 0.0
-        step_y = sw if th2 != 180 else -sw
+        step_y = sw_deg if th2 != 180 else -sw_deg
     else:
         g2 = -math.cos(radian_th2) / math.sin(radian_th2)
-        step_x = math.sqrt((sw ** 2) / (1 + g2 ** 2))
+        step_x = math.sqrt((sw_deg ** 2) / (1 + g2 ** 2))
         if 180 < th2 < 360:
             step_x = -step_x
         step_y = g2 * step_x
