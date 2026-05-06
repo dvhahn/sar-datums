@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timedelta
 import psycopg2
 from domain.model import Coordinate, Wind, SearchObject, CurrentVector
+_last_divergence_tracks = None
 
 KNOTS_TO_MS = 1852 / 3600
 METRES_PER_DEGREE_LAT = 111120
@@ -51,6 +52,14 @@ def calculate_leeway(wind: Wind, search_object: SearchObject) -> CurrentVector:
     vx = math.sin(math.radians(drift_direction)) * wind_speed
     vy = math.cos(math.radians(drift_direction)) * wind_speed
 
+    return CurrentVector(vx, vy)
+
+
+# Rotate a vector by a given angle in degrees (positive = clockwise).
+def rotate_vector(vec: CurrentVector, angle_deg: float) -> CurrentVector:
+    rad = math.radians(angle_deg)
+    vx = vec.vx * math.cos(rad) - vec.vy * math.sin(rad)
+    vy = vec.vx * math.sin(rad) + vec.vy * math.cos(rad)
     return CurrentVector(vx, vy)
 
 
@@ -224,6 +233,7 @@ def get_tidal_current(cur, lat: float, lon: float, current_time: datetime, confi
 
     return CurrentVector(vx, vy)
 
+
 def _grid_step_for_bbox(bbox_width: float) -> float:
     """Pick a stable grid step (degrees) from a discrete ladder based on bbox width.
     Cells are anchored to the global (0, 0) origin so panning never reshuffles arrows;
@@ -334,51 +344,84 @@ def apply_drift_step(position: Coordinate, current: CurrentVector, leeway: Curre
 
     return Coordinate(new_lat, new_lon)
 
-def calculate_drift(start_position, start_time, end_time, wind, search_object, is_reverse=False) -> list[Coordinate]:
+
+def calculate_drift(start_position, start_time, end_time, wind, search_object, is_reverse=False, wind_divergence=False, divergence_angle_override=None) -> list[Coordinate]:
+    global _last_divergence_tracks
+
     conn = _get_db_connection()
     cur = conn.cursor()
     config = _get_config(cur)
 
-    leeway = calculate_leeway(wind, search_object)
+    base_leeway = calculate_leeway(wind, search_object)
 
-    positions = [start_position]
-    current_position = start_position
-    current_time = start_time
+    # Prepare leeway variants (only if divergence enabled)
+    leeway_variants = [("normal", base_leeway)]
+    if wind_divergence:
+        angle = divergence_angle_override if divergence_angle_override is not None else search_object.divergence_angle
+        if angle != 0:
+            leeway_variants.append(("pos_div", rotate_vector(base_leeway, angle)))
+            leeway_variants.append(("neg_div", rotate_vector(base_leeway, -angle)))
 
-    # Decide direction of logic
-    multiplier = -1.0 if is_reverse else 1.0
+    all_tracks = {}
 
     # Absolute seconds for the step, but logic handles the 'while'
     step_delta = timedelta(hours=TIME_STEP_HOURS)
 
-    # Use a condition that handles both directions
-    def has_not_reached_end(current, end, reverse):
-        return current < end if not reverse else current > end
+    for name, leeway in leeway_variants:
+        positions = [start_position]
+        current_position = start_position
+        current_time = start_time
 
-    while has_not_reached_end(current_time, end_time, is_reverse):
-        # Determine next time step
-        if is_reverse:
-            next_time = current_time - step_delta
-            if next_time < end_time: next_time = end_time
-        else:
-            next_time = current_time + step_delta
-            if next_time > end_time: next_time = end_time
+        # Decide direction of logic
+        multiplier = -1.0 if is_reverse else 1.0
 
-        actual_seconds = abs((next_time - current_time).total_seconds())
+        while True:
+            if is_reverse:
+                next_time = current_time - step_delta
+                if next_time < end_time:
+                    next_time = end_time
+            else:
+                next_time = current_time + step_delta
+                if next_time > end_time:
+                    next_time = end_time
 
-        # Get tidal current at this position and time
-        tidal_current = get_tidal_current(
-            cur, current_position.lat, current_position.lon, current_time, config
-        )
+            actual_seconds = abs((next_time - current_time).total_seconds())
+            if actual_seconds == 0:
+                break
 
-        # Apply drift step with multiplier
-        current_position = apply_drift_step(
-            current_position, tidal_current, leeway, actual_seconds, multiplier
-        )
+            # Get tidal current at this time and position
+            tidal_current = get_tidal_current(
+                cur, current_position.lat, current_position.lon, current_time, config
+            )
 
-        positions.append(current_position)
-        current_time = next_time
+            # Apply drift step (using multiplier for reverse track)
+            current_position = apply_drift_step(
+                current_position, tidal_current, leeway, actual_seconds, multiplier
+            )
+
+            positions.append(current_position)
+            current_time = next_time
+
+            # Use a condition that handles both directions
+            if (is_reverse and current_time <= end_time) or (not is_reverse and current_time >= end_time):
+                break
+
+        all_tracks[name] = positions
 
     cur.close()
     conn.close()
-    return positions
+
+    # Store divergence tracks (excluding normal)
+    if wind_divergence and 'pos_div' in all_tracks and 'neg_div' in all_tracks:
+        _last_divergence_tracks = {
+            'pos_div': all_tracks['pos_div'],
+            'neg_div': all_tracks['neg_div']
+        }
+
+    # Return only the normal track (backward compatible with existing code)
+    return all_tracks['normal']
+
+
+def get_last_divergence_tracks():
+    return _last_divergence_tracks
+

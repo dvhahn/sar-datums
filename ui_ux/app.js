@@ -236,7 +236,6 @@ function startCurrentsAnimation() {
 const cardWrap     = document.getElementById('cardWrap');
 const cardClose    = document.querySelector('.card-close');
 const cardBackdrop = document.querySelector('.card-backdrop');
-const objectSelect = document.getElementById('inpObject');
 const inpStart     = document.getElementById('inpStart');
 const inpEnd       = document.getElementById('inpEnd');
 const fab          = document.getElementById('fab');
@@ -253,20 +252,111 @@ function toLocalDatetime(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// ── Object picker (hierarchical)
+const btnSelectObject = document.getElementById('btnSelectObject');
+const btnChangeObject = document.getElementById('btnChangeObject');
+const objectPicker = document.getElementById('objectPicker');
+const selectedObjectNameSpan = document.getElementById('selectedObjectName');
+const selectedObjectIdInput = document.getElementById('selectedObjectId');
+const objectSelectionDiv = document.getElementById('object-selection');
 
-// ── Load search objects
-async function loadObjects() {
+let fullTree = [];
+let currentPath = [];
+let currentNode = null;
+
+// Fetch the full object hierarchy from the backend and reset picker state to root. On error, show a message in the picker.
+async function loadPicker() {
   try {
-    const res = await fetch('/api/objects');
-    const list = await res.json();
-    objectSelect.innerHTML = list
-      .map(o => `<option value="${o.id}">${o.name}</option>`)
-      .join('');
-  } catch {
-    objectSelect.innerHTML = '<option>Failed to load</option>';
+    const res = await fetch('/api/object-hierarchy');
+    if (!res.ok) throw new Error();
+    fullTree = await res.json();
+    currentPath = [];
+    currentNode = null;
+    renderCurrentLevel();
+  } catch (err) {
+    console.error('Failed to load object hierarchy', err);
+    document.getElementById('pickerLevel').innerHTML = '<div class="error">Failed to load object types</div>';
   }
 }
-loadObjects();
+
+// Render the current level of the hierarchy as buttons. If currentNode is null, we're at the root and show top-level categories. Otherwise show currentNode's children. Also update the path display and back button visibility.
+function renderCurrentLevel() {
+  const levelDiv = document.getElementById('pickerLevel');
+  const backBtn = document.getElementById('pickerBack');
+  const pathSpan = document.getElementById('pickerPath');
+  let items = [];
+  if (currentNode === null) {
+    items = fullTree;
+    pathSpan.textContent = 'Select category';
+  } else {
+    items = currentNode.children || [];
+    const names = currentPath.map(node => node.name).join(' → ');
+    pathSpan.textContent = names;
+  }
+  levelDiv.innerHTML = '';
+  items.forEach(item => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = item.name;
+    btn.dataset.id = item.id;
+    btn.addEventListener('click', () => {
+      if (item.children && item.children.length > 0) {
+        currentPath.push(item);
+        currentNode = item;
+        renderCurrentLevel();
+      } else {
+        selectedObjectIdInput.value = item.id;
+        selectedObjectNameSpan.textContent = item.name;
+        selectedObjectNameSpan.classList.remove('hidden');
+        btnChangeObject.classList.remove('hidden');
+        btnSelectObject.classList.add('hidden');
+        objectPicker.classList.add('hidden');
+        objectSelectionDiv.classList.remove('hidden');
+      }
+    });
+    levelDiv.appendChild(btn);
+  });
+  if (currentPath.length === 0) {
+    backBtn.classList.add('hidden');
+  } else {
+    backBtn.classList.remove('hidden');
+  }
+}
+
+// Go back up one level in the hierarchy. If we're at the root, do nothing.
+function goBack() {
+  if (currentPath.length === 0) return;
+  currentPath.pop();
+  currentNode = currentPath.length === 0 ? null : currentPath[currentPath.length - 1];
+  renderCurrentLevel();
+}
+
+document.getElementById('pickerBack').addEventListener('click', goBack);
+
+// Open the object picker. If we haven't loaded the hierarchy yet, fetch it. Otherwise just reset to the root level.
+btnSelectObject.addEventListener('click', () => {
+  objectSelectionDiv.classList.add('hidden');
+  objectPicker.classList.remove('hidden');
+  if (fullTree.length === 0) loadPicker();
+  else {
+    currentPath = [];
+    currentNode = null;
+    renderCurrentLevel();
+  }
+});
+
+// Change object: clear selection and go back to root of picker.
+btnChangeObject.addEventListener('click', () => {
+  selectedObjectIdInput.value = '';
+  selectedObjectNameSpan.textContent = '';
+  selectedObjectNameSpan.classList.add('hidden');
+  btnChangeObject.classList.add('hidden');
+  btnSelectObject.classList.remove('hidden');
+  objectSelectionDiv.classList.remove('hidden');
+  currentPath = [];
+  currentNode = null;
+  if (fullTree.length) renderCurrentLevel();
+});
 
 
 // ── Card open / close
@@ -395,6 +485,7 @@ const inpMultipleTracks = document.getElementById('inpMultipleTracks');
 const inpRadius         = document.getElementById('inpRadius');
 const radiusSection     = document.getElementById('radiusSection');
 const formError         = document.getElementById('formError');
+const chkDivergence     = document.getElementById('chkDivergence');
 
 inpMultipleTracks.addEventListener('change', () => {
   radiusSection.classList.toggle('hidden', !inpMultipleTracks.checked);
@@ -552,10 +643,12 @@ btnCalculate.addEventListener('click', async () => {
         end_time:         endTime,
         wind_speed:       parseFloat(inpWindSpeed.value),
         wind_direction:   parseFloat(inpWindDir.value),
-        object_id:        parseInt(objectSelect.value, 10),
+        object_id:        parseInt(selectedObjectIdInput.value, 10),
         is_reverse:       isReverse,
         multiple_tracks:  inpMultipleTracks.checked,
         radius_nm:        parseFloat(inpRadius.value),
+        wind_divergence:   chkDivergence.checked,
+        divergence_angle: 30,
       }),
     });
 
@@ -599,6 +692,8 @@ function addRun(data, meta) {
     color: RUN_COLORS[(runCounter - 1) % RUN_COLORS.length],
     positions: data.positions,
     satellites: data.satellites || [],
+    posDivPositions: data.pos_div_positions || null,
+    negDivPositions: data.neg_div_positions || null,
     summary: data.summary,
     ...meta,
   };
@@ -624,6 +719,15 @@ function removeRun(id) {
     if (map.getLayer(satId))  map.removeLayer(satId);
     if (map.getSource(satId)) map.removeSource(satId);
   });
+  if (run.posDivLayerId) {
+    if (map.getLayer(run.posDivLayerId)) map.removeLayer(run.posDivLayerId);
+    if (map.getSource(run.posDivLayerId)) map.removeSource(run.posDivLayerId);
+  }
+  if (run.negDivLayerId) {
+   if (map.getLayer(run.negDivLayerId)) map.removeLayer(run.negDivLayerId);
+   if (map.getSource(run.negDivLayerId)) map.removeSource(run.negDivLayerId);
+  }
+
   run.markers?.forEach(m => m.remove());
   URL.revokeObjectURL(run.gpxUrl);
   URL.revokeObjectURL(run.kmlUrl);
@@ -692,6 +796,56 @@ function drawRun(run) {
     },
   });
   run.radiusLayers = [radiusId, `${radiusId}-line`];
+
+  // Draw positive divergence track (if exists)
+  if (run.posDivPositions && run.posDivPositions.length) {
+    const posCoords = run.posDivPositions.map(p => [p.lon, p.lat]);
+    const posLayerId = `run-${run.id}-posdiv`;
+    map.addSource(posLayerId, {
+      type: 'geojson',
+      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: posCoords } },
+    });
+    map.addLayer({
+      id: posLayerId,
+      type: 'line',
+      source: posLayerId,
+      paint: {
+        'line-color': '#ff9f0a',   // orange
+        'line-width': 2.5,
+        'line-dasharray': [6, 4],
+        'line-opacity': 0.7,
+      },
+    });
+    // Show popup on positive divergence track hover, just like the main track.
+    map.on('mousemove', posLayerId, e => showTrackPopup(e, run.posDivPositions, `Run ${run.id} · +div`));
+    map.on('mouseleave', posLayerId, hideTrackPopup);
+    // store layer id for cleanup later
+    run.posDivLayerId = posLayerId;
+  }
+
+  // Draw negative divergence track (if exists)
+  if (run.negDivPositions && run.negDivPositions.length) {
+    const negCoords = run.negDivPositions.map(p => [p.lon, p.lat]);
+    const negLayerId = `run-${run.id}-negdiv`;
+    map.addSource(negLayerId, {
+      type: 'geojson',
+      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: negCoords } },
+    });
+    map.addLayer({
+      id: negLayerId,
+      type: 'line',
+      source: negLayerId,
+      paint: {
+        'line-color': '#ff453a',   // red
+        'line-width': 2.5,
+        'line-dasharray': [6, 4],
+        'line-opacity': 0.7,
+      },
+    });
+    map.on('mousemove', negLayerId, e => showTrackPopup(e, run.negDivPositions, `Run ${run.id} · -div`));
+    map.on('mouseleave', negLayerId, hideTrackPopup);
+    run.negDivLayerId = negLayerId;
+  }
 
   // Satellites first, so the main track sits visually on top.
   run.satelliteLayers = [];
@@ -858,3 +1012,11 @@ function makeEndMarker(lngLat, color) {
   `;
   return new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
 }
+
+// Preload object hierarchy after page load (but don't show picker)
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const res = await fetch('/api/object-hierarchy');
+    if (res.ok) fullTree = await res.json();
+  } catch (e) { console.error('Preload hierarchy failed', e); }
+});
