@@ -241,12 +241,30 @@ const inpStart     = document.getElementById('inpStart');
 const inpEnd       = document.getElementById('inpEnd');
 const fab          = document.getElementById('fab');
 
+// Pattern dialog references
+const patternCardWrap = document.getElementById('patternCardWrap');
+const btnPatternYes = document.getElementById('btnPatternYes');
+const btnPatternNo = document.getElementById('btnPatternNo');
+const inpRadius = document.getElementById('inpRadius');
+
+// Accuracy dialog references
+const accuracyToggle = document.getElementById('accuracyToggle');
+const accuracyCardWrap = document.getElementById('accuracyCardWrap');
+const inpAccObject = document.getElementById('inpAccObject');
+const inpAccStart = document.getElementById('inpAccStart');
+const inpAccEnd = document.getElementById('inpAccEnd');
+const btnTestAccuracy = document.getElementById('btnTestAccuracy');
+const accuracyResults = document.getElementById('accuracyResults');
+const accuracyFormError = document.getElementById('accuracyFormError');
+
 
 // ── Default time
 const now   = new Date();
 const later = new Date(now.getTime() + 3 * 60 * 60 * 1000);
 inpStart.value = toLocalDatetime(now);
 inpEnd.value   = toLocalDatetime(later);
+inpAccStart.value = toLocalDatetime(now);
+inpAccEnd.value   = toLocalDatetime(later);
 
 function toLocalDatetime(d) {
   const pad = n => String(n).padStart(2, '0');
@@ -259,11 +277,14 @@ async function loadObjects() {
   try {
     const res = await fetch('/api/objects');
     const list = await res.json();
-    objectSelect.innerHTML = list
+    const optionsHtml = list
       .map(o => `<option value="${o.id}">${o.name}</option>`)
       .join('');
+    objectSelect.innerHTML = optionsHtml;
+    inpAccObject.innerHTML = optionsHtml;
   } catch {
     objectSelect.innerHTML = '<option>Failed to load</option>';
+    inpAccObject.innerHTML = '<option>Failed to load</option>';
   }
 }
 loadObjects();
@@ -282,6 +303,32 @@ function closeCard() {
 
 cardClose.addEventListener('click', closeCard);
 cardBackdrop.addEventListener('click', closeCard);
+
+// ── Pattern dialog
+function openPatternDialog() {
+  patternCardWrap.classList.remove('hidden');
+}
+
+function closePatternDialog() {
+  patternCardWrap.classList.add('hidden');
+}
+
+// ── Accuracy dialog
+function openAccuracyCard() {
+  accuracyCardWrap.classList.remove('hidden');
+  fab.classList.add('hidden');
+  accuracyResults.classList.add('hidden');
+  clearAccuracyError();
+}
+
+function closeAccuracyCard() {
+  accuracyCardWrap.classList.add('hidden');
+  fab.classList.remove('hidden');
+}
+
+accuracyToggle.addEventListener('click', openAccuracyCard);
+accuracyCardWrap.querySelector('.card-close').addEventListener('click', closeAccuracyCard);
+accuracyCardWrap.querySelector('.card-backdrop').addEventListener('click', closeAccuracyCard);
 
 
 // ── FAB: click = open card, drag = pin drop; drag back to corner = cancel
@@ -390,15 +437,8 @@ const inpLat       = document.getElementById('inpLat');
 const inpLon       = document.getElementById('inpLon');
 const inpWindSpeed = document.getElementById('inpWindSpeed');
 const inpWindDir   = document.getElementById('inpWindDir');
-const inpReverse        = document.getElementById('inpReverse');
-const inpMultipleTracks = document.getElementById('inpMultipleTracks');
-const inpRadius         = document.getElementById('inpRadius');
-const radiusSection     = document.getElementById('radiusSection');
-const formError         = document.getElementById('formError');
-
-inpMultipleTracks.addEventListener('change', () => {
-  radiusSection.classList.toggle('hidden', !inpMultipleTracks.checked);
-});
+const inpReverse   = document.getElementById('inpReverse');
+const formError    = document.getElementById('formError');
 
 const RUN_COLORS = ['#0a84ff', '#ff9f0a', '#bf5af2', '#30d158', '#ff453a', '#64d2ff', '#ffd60a', '#ff375f'];
 const SAT_DIRECTIONS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -524,38 +564,70 @@ function clearError() {
   formError.classList.add('hidden');
 }
 
+function showAccuracyError(msg) {
+  accuracyFormError.textContent = msg;
+  accuracyFormError.classList.remove('hidden');
+}
+
+function clearAccuracyError() {
+  accuracyFormError.classList.add('hidden');
+}
+
 document.querySelectorAll('.card-form input, .card-form select')
   .forEach(el => el.addEventListener('input', clearError));
 
 
 btnCalculate.addEventListener('click', async () => {
   clearError();
+
+  // Store form data for later use
+  const formData = {
+    lat: parseFloat(inpLat.value),
+    lon: parseFloat(inpLon.value),
+    startTime: inpReverse.checked ? (inpEnd.value + ':00') : (inpStart.value + ':00'),
+    endTime: inpReverse.checked ? (inpStart.value + ':00') : (inpEnd.value + ':00'),
+    windSpeed: parseFloat(inpWindSpeed.value),
+    windDirection: parseFloat(inpWindDir.value),
+    objectId: parseInt(objectSelect.value, 10),
+    isReverse: inpReverse.checked,
+  };
+
+  // Close main card and open pattern dialog
+  closeCard();
+  openPatternDialog();
+
+  // Handle pattern dialog responses
+  btnPatternYes.onclick = async () => {
+    closePatternDialog();
+    await executeDriftCalculation(formData, true);
+  };
+
+  btnPatternNo.onclick = async () => {
+    closePatternDialog();
+    await executeDriftCalculation(formData, false);
+  };
+});
+
+async function executeDriftCalculation(formData, withPatterns) {
+  const btnCalculate = document.getElementById('btnCalculate');
   btnCalculate.disabled = true;
   btnCalculate.textContent = 'Calculating…';
 
   try {
-    // Backend expects start_time > end_time when reverse is on.
-    // Keep the form natural (earlier → later) and swap here.
-    const isReverse = inpReverse.checked;
-    const earlier = inpStart.value + ':00';
-    const later   = inpEnd.value + ':00';
-    const startTime = isReverse ? later   : earlier;
-    const endTime   = isReverse ? earlier : later;
-
     const res = await fetch('/api/drift', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        lat:              parseFloat(inpLat.value),
-        lon:              parseFloat(inpLon.value),
-        start_time:       startTime,
-        end_time:         endTime,
-        wind_speed:       parseFloat(inpWindSpeed.value),
-        wind_direction:   parseFloat(inpWindDir.value),
-        object_id:        parseInt(objectSelect.value, 10),
-        is_reverse:       isReverse,
-        multiple_tracks:  inpMultipleTracks.checked,
-        radius_nm:        parseFloat(inpRadius.value),
+        lat: formData.lat,
+        lon: formData.lon,
+        start_time: formData.startTime,
+        end_time: formData.endTime,
+        wind_speed: formData.windSpeed,
+        wind_direction: formData.windDirection,
+        object_id: formData.objectId,
+        is_reverse: formData.isReverse,
+        multiple_tracks: withPatterns,
+        radius_nm: parseFloat(inpRadius.value),
       }),
     });
 
@@ -569,21 +641,20 @@ btnCalculate.addEventListener('click', async () => {
     ]);
 
     addRun(data, {
-      isReverse: inpReverse.checked,
-      startLat: parseFloat(inpLat.value),
-      startLon: parseFloat(inpLon.value),
+      isReverse: formData.isReverse,
+      startLat: formData.lat,
+      startLon: formData.lon,
       gpxUrl: makeBlobUrl(gpxText, 'application/gpx+xml'),
       kmlUrl: makeBlobUrl(kmlText, 'application/vnd.google-earth.kml+xml'),
     });
-
-    closeCard();
   } catch (err) {
     showError(err.message);
+    openCard();
   } finally {
     btnCalculate.disabled = false;
     btnCalculate.textContent = 'Calculate Datum';
   }
-});
+}
 
 
 function makeBlobUrl(text, type) {
@@ -858,3 +929,64 @@ function makeEndMarker(lngLat, color) {
   `;
   return new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
 }
+
+
+// ── Testing Accuracy functionality
+btnTestAccuracy.addEventListener('click', async () => {
+  clearAccuracyError();
+  btnTestAccuracy.disabled = true;
+  btnTestAccuracy.textContent = 'Testing…';
+
+  try {
+    // Get form data
+    const isReverse = document.getElementById('inpAccReverse').checked;
+    const earlier = inpAccStart.value + ':00';
+    const later = inpAccEnd.value + ':00';
+    const startTime = isReverse ? later : earlier;
+    const endTime = isReverse ? earlier : later;
+
+    // Get GPX file
+    const fileInput = document.getElementById('inpGpxFile');
+    if (!fileInput.files || !fileInput.files[0]) {
+      throw new Error('Please select a GPX file');
+    }
+
+    const gpxFile = fileInput.files[0];
+    const referenceGpx = await gpxFile.text();
+
+    // Call accuracy API
+    const res = await fetch('/api/accuracy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lat: parseFloat(document.getElementById('inpAccLat').value),
+        lon: parseFloat(document.getElementById('inpAccLon').value),
+        start_time: startTime,
+        end_time: endTime,
+        wind_speed: parseFloat(document.getElementById('inpAccWindSpeed').value),
+        wind_direction: parseFloat(document.getElementById('inpAccWindDir').value),
+        object_id: parseInt(inpAccObject.value, 10),
+        is_reverse: isReverse,
+        reference_gpx: referenceGpx,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+
+    // Display results
+    document.getElementById('resultAccuracy').textContent = `${data.accuracy_pct}%`;
+    document.getElementById('resultFinalError').textContent = `${data.final_error_nm} nm`;
+    document.getElementById('resultMeanError').textContent = `${data.mean_error_m} m`;
+    document.getElementById('resultMaxError').textContent = `${data.max_error_m} m`;
+    document.getElementById('resultPairedPoints').textContent = data.paired_points;
+    document.getElementById('resultTrackLength').textContent = `${data.ref_track_length_m} m`;
+
+    accuracyResults.classList.remove('hidden');
+  } catch (err) {
+    showAccuracyError(err.message);
+  } finally {
+    btnTestAccuracy.disabled = false;
+    btnTestAccuracy.textContent = 'Test Accuracy';
+  }
+});
