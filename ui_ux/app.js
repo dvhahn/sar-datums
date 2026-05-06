@@ -619,8 +619,30 @@ document.querySelectorAll('.card-form input, .card-form select')
   .forEach(el => el.addEventListener('input', clearError));
 
 
+// Front-end form validation. Returns null if valid, otherwise a user-facing
+// message naming the first missing field. Catching these here keeps the
+// browser network log clean — without it, missing inputs would fire a POST
+// that the backend rejects with 400, which the devtools console then shows
+// in red regardless of how we handle the response.
+function validateDriftForm() {
+  if (!inpLat.value || !inpLon.value) return 'Enter a start position (lat / lon).';
+  if (!inpStart.value)                 return 'Pick a start time.';
+  if (!inpEnd.value)                   return 'Pick an end time.';
+  if (inpStart.value === inpEnd.value) return 'Start and end times must differ.';
+  if (!inpWindSpeed.value || inpWindDir.value === '') return 'Enter wind speed and direction.';
+  if (!selectedObjectIdInput.value)    return 'Select an object type before calculating.';
+  return null;
+}
+
 btnCalculate.addEventListener('click', async () => {
   clearError();
+
+  const validationError = validateDriftForm();
+  if (validationError) {
+    showError(validationError);
+    return;   // request never goes out, console stays clean
+  }
+
   btnCalculate.disabled = true;
   btnCalculate.textContent = 'Calculating…';
 
