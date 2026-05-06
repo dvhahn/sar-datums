@@ -161,13 +161,11 @@ def _find_nearest_vectors(cur, lat: float, lon: float, time_step: float):
 
     nearest_lat, nearest_lon = nearest
 
-    # Step 2: Fetch neap and spring vectors at that point for the given time_step.
-    # time_step column is REAL (float4); cast the float8 param so equality matches
-    # values like 0.1, 1.7 that don't round-trip identically across precisions.
+    # Step 2: Fetch neap and spring vectors at that point for the given time_step
     cur.execute("""
         SELECT tide_type, vx, vy
         FROM tidal_vectors
-        WHERE lat = %s AND lon = %s AND time_step = %s::real
+        WHERE lat = %s AND lon = %s AND ABS(time_step - %s) < 0.001
     """, (nearest_lat, nearest_lon, time_step))
 
     rows = cur.fetchall()
@@ -224,100 +222,6 @@ def get_tidal_current(cur, lat: float, lon: float, current_time: datetime, confi
 
     return CurrentVector(vx, vy)
 
-def _grid_step_for_bbox(bbox_width: float) -> float:
-    """Pick a stable grid step (degrees) from a discrete ladder based on bbox width.
-    Cells are anchored to the global (0, 0) origin so panning never reshuffles arrows;
-    only crossing a width threshold (i.e. zooming) triggers a step change.
-    """
-    for threshold, step in ((1.0, 0.04), (0.4, 0.02), (0.1, 0.01), (0.05, 0.005)):
-        if bbox_width >= threshold:
-            return step
-    return 0.0025
-
-
-def get_currents_grid(
-    sample_time: datetime,
-    lat_min: float, lat_max: float,
-    lon_min: float, lon_max: float,
-) -> list[dict]:
-    """Sample tidal currents at a grid of points within the bbox for `sample_time`.
-    Returns one entry per cell with speed (knots) and compass bearing (degrees).
-    """
-    conn = _get_db_connection()
-    cur = conn.cursor()
-    try:
-        config = _get_config(cur)
-
-        brackets = _find_bracketing_tides(cur, sample_time)
-        if brackets is None:
-            return []
-        prev_time, prev_height, next_time, next_height = brackets
-        time_step, is_ebb = _calculate_time_step(
-            sample_time, prev_time, prev_height, next_time, next_height
-        )
-        tide_range = next_height - prev_height
-        rratio = _calculate_rratio(tide_range, config, is_ebb)
-
-        width = lon_max - lon_min
-        height = lat_max - lat_min
-        if width <= 0 or height <= 0:
-            return []
-        step = _grid_step_for_bbox(max(width, height))
-
-        # Globally-anchored grid: FLOOR(coord / step) gives the same cell index for
-        # any coord regardless of bbox position, so panning yields stable points.
-        cur.execute("""
-            SELECT DISTINCT ON (
-                FLOOR(lat / %s),
-                FLOOR(lon / %s)
-            ) lat, lon
-            FROM locations
-            WHERE lat BETWEEN %s AND %s
-              AND lon BETWEEN %s AND %s
-            ORDER BY FLOOR(lat / %s), FLOOR(lon / %s), lat, lon
-        """, (
-            step, step,
-            lat_min, lat_max, lon_min, lon_max,
-            step, step,
-        ))
-        points = cur.fetchall()
-        if not points:
-            return []
-
-        # One round-trip for all neap+spring vectors at the chosen time_step.
-        values_sql = ','.join(f'({lat}, {lon})' for lat, lon in points)
-        cur.execute(f"""
-            SELECT lat, lon, tide_type, vx, vy
-            FROM tidal_vectors
-            WHERE (lat, lon) IN (VALUES {values_sql})
-              AND time_step = %s::real
-        """, (time_step,))
-
-        by_point: dict = {}
-        for lat, lon, tide_type, vx, vy in cur.fetchall():
-            entry = by_point.setdefault((float(lat), float(lon)), {})
-            entry[tide_type] = (float(vx), float(vy))
-
-        result = []
-        for (lat, lon), vectors in by_point.items():
-            neap_vx, neap_vy = vectors.get('neap', (0.0, 0.0))
-            spring_vx, spring_vy = vectors.get('spring', (0.0, 0.0))
-            vx = neap_vx + (spring_vx - neap_vx) * rratio
-            vy = neap_vy + (spring_vy - neap_vy) * rratio
-            speed_kt = math.sqrt(vx * vx + vy * vy) * 3600 / 1852
-            bearing_deg = (math.degrees(math.atan2(vx, vy)) + 360) % 360
-            result.append({
-                'lat': lat,
-                'lon': lon,
-                'speed_kt': round(speed_kt, 2),
-                'bearing_deg': round(bearing_deg, 1),
-            })
-        return result
-    finally:
-        cur.close()
-        conn.close()
-
-
 def apply_drift_step(position: Coordinate, current: CurrentVector, leeway: CurrentVector, time_delta_seconds: float, multiplier: float = 1.0) -> Coordinate:
     """Calculate new position after drifting for time_delta_seconds.
     Combines tidal current + wind leeway, converts to lat/lon displacement.
@@ -340,45 +244,126 @@ def calculate_drift(start_position, start_time, end_time, wind, search_object, i
     config = _get_config(cur)
 
     leeway = calculate_leeway(wind, search_object)
+    multiplier = -1.0 if is_reverse else 1.0
 
     positions = [start_position]
     current_position = start_position
     current_time = start_time
 
-    # Decide direction of logic
-    multiplier = -1.0 if is_reverse else 1.0
-
-    # Absolute seconds for the step, but logic handles the 'while'
-    step_delta = timedelta(hours=TIME_STEP_HOURS)
-
-    # Use a condition that handles both directions
     def has_not_reached_end(current, end, reverse):
         return current < end if not reverse else current > end
 
     while has_not_reached_end(current_time, end_time, is_reverse):
-        # Determine next time step
-        if is_reverse:
-            next_time = current_time - step_delta
-            if next_time < end_time: next_time = end_time
+        # Get bracketing tides to calculate VBA-style dynamic TmPeriod
+        brackets = _find_bracketing_tides(cur, current_time)
+        if brackets is None:
+            break
+
+        prev_time, prev_height, next_time, next_height = brackets
+        tide_range = next_height - prev_height
+        is_ebb = tide_range < 0
+
+        # VBA: TmPeriod = (NxtTm - TideTm) / ColCount(Td, SpNp, 0)
+        # Determine spring or neap
+        abs_range = abs(tide_range)
+        if is_ebb:
+            neap_range = config['neap_ebb_tide_range']
+            spring_range = config['spring_ebb_tide_range']
+            neap_steps = NEAP_EBB_STEPS
+            spring_steps = SPRING_EBB_STEPS
         else:
-            next_time = current_time + step_delta
-            if next_time > end_time: next_time = end_time
+            neap_range = config['neap_flood_tide_range']
+            spring_range = config['spring_flood_tide_range']
+            neap_steps = NEAP_FLOOD_STEPS
+            spring_steps = SPRING_FLOOD_STEPS
 
-        actual_seconds = abs((next_time - current_time).total_seconds())
+        # Pick closer of spring/neap for step count (VBA: SpNp)
+        if abs(abs_range - spring_range) < abs(abs_range - neap_range):
+            col_count = spring_steps
+        else:
+            col_count = neap_steps
 
-        # Get tidal current at this position and time
+        # Dynamic step size matching VBA TmPeriod
+        tide_period_seconds = (next_time - prev_time).total_seconds()
+        tm_period_seconds = tide_period_seconds / col_count
+
+        # Advance by one TmPeriod (capped at end_time)
+        if is_reverse:
+            step_end = current_time - timedelta(seconds=tm_period_seconds)
+            if step_end < end_time:
+                step_end = end_time
+        else:
+            step_end = current_time + timedelta(seconds=tm_period_seconds)
+            if step_end > end_time:
+                step_end = end_time
+
+        actual_seconds = abs((step_end - current_time).total_seconds())
+
         tidal_current = get_tidal_current(
             cur, current_position.lat, current_position.lon, current_time, config
         )
 
-        # Apply drift step with multiplier
         current_position = apply_drift_step(
             current_position, tidal_current, leeway, actual_seconds, multiplier
         )
 
         positions.append(current_position)
-        current_time = next_time
+        current_time = step_end
 
     cur.close()
     conn.close()
     return positions
+
+
+def get_currents_grid(sample_time: datetime, lat_min: float, lat_max: float, lon_min: float, lon_max: float, grid_size: int = 15) -> list[dict]:
+    """Sample tidal currents at a grid of points within the bounding box.
+    Returns a list of arrow objects for visualization.
+
+    Args:
+        sample_time: Time to sample currents at
+        lat_min, lat_max, lon_min, lon_max: Bounding box
+        grid_size: Number of points along each axis (default 15x15 grid)
+
+    Returns:
+        List of dicts with keys: lat, lon, bearing_deg, speed_kt
+    """
+    conn = _get_db_connection()
+    cur = conn.cursor()
+    config = _get_config(cur)
+
+    arrows = []
+
+    # Create a grid of sample points
+    lat_step = (lat_max - lat_min) / (grid_size - 1) if grid_size > 1 else 0
+    lon_step = (lon_max - lon_min) / (grid_size - 1) if grid_size > 1 else 0
+
+    for i in range(grid_size):
+        for j in range(grid_size):
+            lat = lat_min + i * lat_step
+            lon = lon_min + j * lon_step
+
+            # Get tidal current at this point
+            current = get_tidal_current(cur, lat, lon, sample_time, config)
+
+            # Convert velocity components to bearing and speed
+            if abs(current.vx) < 0.001 and abs(current.vy) < 0.001:
+                continue  # Skip zero-velocity points
+
+            # Calculate bearing (direction current is flowing TO)
+            bearing_rad = math.atan2(current.vx, current.vy)
+            bearing_deg = (math.degrees(bearing_rad) + 360) % 360
+
+            # Calculate speed in knots
+            speed_ms = math.sqrt(current.vx ** 2 + current.vy ** 2)
+            speed_kt = speed_ms / KNOTS_TO_MS
+
+            arrows.append({
+                'lat': lat,
+                'lon': lon,
+                'bearing_deg': bearing_deg,
+                'speed_kt': round(speed_kt, 2)
+            })
+
+    cur.close()
+    conn.close()
+    return arrows
