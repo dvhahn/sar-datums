@@ -65,7 +65,13 @@ python database/parse_tidal_data.py <excel_path>
 ```
 NOTE: This process may take approximately 40 minutes.
 
-#### 7. Create Locations Table + Indexes
+#### 7. Import the SAR Object Catalogue
+Populates `object_types` from `data/objects.csv` (117 entries — leeway coefficients and divergence angles for the object picker / divergence drift):
+```
+python database/import_objects_csv.py data/objects.csv
+```
+
+#### 8. Create Locations Table + Indexes
 This will create locations table, create a spatial index for faster geospatial lookups, and create an index to speed up tidal vector queries:
 ```
 psql -U postgres -d sar_datums -c "CREATE TABLE locations AS SELECT DISTINCT lat, lon, location FROM tidal_vectors;"
@@ -73,7 +79,7 @@ psql -U postgres -d sar_datums -c "CREATE INDEX idx_locations_gist ON locations 
 psql -U postgres -d sar_datums -c "CREATE INDEX idx_tidal_vectors_coords ON tidal_vectors (lat, lon, time_step);"
 ```
 
-#### 8. Set Environment Variables for PostgreSQL Login and Verify Setup
+#### 9. Set Environment Variables for PostgreSQL Login and Verify Setup
 To verify that everything is working correctly, run:
 ```
 $env:DB_USER=postgres
@@ -126,7 +132,13 @@ python database/parse_tidal_data.py "<excel_path>"
 ```
 NOTE: This process may take approximately 40 minutes.
 
-#### 7. Create Locations Table + Indexes
+#### 7. Import the SAR Object Catalogue
+Populates `object_types` from `data/objects.csv` (117 entries — leeway coefficients and divergence angles for the object picker / divergence drift):
+```
+python database/import_objects_csv.py data/objects.csv
+```
+
+#### 8. Create Locations Table + Indexes
 This will create locations table, create a spatial index for faster geospatial lookups, and create an index to speed up tidal vector queries:
 ```
 psql -U postgres -d sar_datums -c "CREATE TABLE locations AS SELECT DISTINCT lat, lon, location FROM tidal_vectors;"
@@ -134,7 +146,7 @@ psql -U postgres -d sar_datums -c "CREATE INDEX idx_locations_gist ON locations 
 psql -U postgres -d sar_datums -c "CREATE INDEX idx_tidal_vectors_coords ON tidal_vectors (lat, lon, time_step);"
 ```
 
-#### 8. Set Environment Variables for PostgreSQL Login and Verify Setup
+#### 9. Set Environment Variables for PostgreSQL Login and Verify Setup
 To verify that everything is working correctly, run:
 ```
 $env:DB_USER="postgres"

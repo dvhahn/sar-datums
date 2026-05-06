@@ -97,4 +97,27 @@ INSERT INTO config (key, value) VALUES
     ('spring_ebb_tide_range', 2.729),  -- B33
     ('spring_flood_tide_range',2.768), -- B34
     ('msl', 1.93);                     -- B42: Mean Sea Level
-    
+
+
+-- ============================================================
+-- Table 4: object_types
+-- Source: data/objects.csv (Peter's SAR catalogue, 117 entries).
+-- Tree of search-object categories with the leeway coefficients
+-- (a, b) and the divergence angle the drift loop uses to fan out
+-- ±N° leeway tracks. Populated by:
+--   python database/import_objects_csv.py data/objects.csv
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS object_types (
+    id               SERIAL PRIMARY KEY,
+    name             TEXT NOT NULL,
+    parent_id        INTEGER REFERENCES object_types(id) ON DELETE SET NULL,
+    level            INTEGER,
+    coefficient_a    DOUBLE PRECISION NOT NULL DEFAULT 0,
+    coefficient_b    DOUBLE PRECISION NOT NULL DEFAULT 0,
+    divergence_angle DOUBLE PRECISION NOT NULL DEFAULT 0,
+    display_order    INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_object_types_parent ON object_types (parent_id);
+CREATE INDEX IF NOT EXISTS idx_object_types_order  ON object_types (display_order);
