@@ -161,6 +161,7 @@ def drift():
             sat_positions, _ = calculate_drift(
                 sat_start, start_time, end_time, wind, search_object,
                 is_reverse=is_reverse,
+                target=db_target,
             )
             satellites.append([
                 {"lat": round(p.lat, 6), "lon": round(p.lon, 6)}
