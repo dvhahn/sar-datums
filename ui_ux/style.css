@@ -915,6 +915,50 @@ body {
   margin-bottom: 8px;
 }
 
+/* ============================================================
+   Form label row — label + inline action button side by side.
+   ============================================================ */
+.form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.form-label-row .form-label {
+  margin-bottom: 0;
+}
+
+.btn-get-wind {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-dim);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn-get-wind:hover {
+  background: var(--color-hover);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.btn-get-wind.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -961,6 +1005,111 @@ body {
 .field select {
   cursor: pointer;
   font-family: var(--font-ui);
+}
+
+/* ============================================================
+   Small card variant for dialogs
+   ============================================================ */
+.card-small {
+  width: 360px;
+}
+
+.card-body {
+  margin-bottom: 20px;
+}
+
+.pattern-question {
+  font-size: 14px;
+  color: var(--color-text);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ============================================================
+   Accuracy results display
+   ============================================================ */
+.accuracy-results {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.accuracy-results.hidden {
+  display: none;
+}
+
+.results-header {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  margin-bottom: 12px;
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--color-hover);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.result-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.result-value {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* ============================================================
+   File input field styling
+   ============================================================ */
+.file-field input[type="file"] {
+  padding: 8px 12px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.file-field input[type="file"]::file-selector-button {
+  padding: 6px 12px;
+  margin-right: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.file-field input[type="file"]::file-selector-button:hover {
+  background: var(--color-hover);
 }
 
 /* ============================================================
@@ -1076,4 +1225,29 @@ body {
 
 .btn-primary:active {
   transform: translateY(0);
+}
+
+/* ============================================================
+   Secondary button — for dialogs.
+   ============================================================ */
+.btn-secondary {
+  padding: 12px 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-secondary:hover {
+  background: var(--color-hover);
+  border-color: var(--color-text-dim);
+}
+
+.btn-secondary:active {
+  transform: scale(0.98);
 }

@@ -6,6 +6,8 @@ from domain.model import Coordinate, Wind, SearchObject
 from services.drift import calculate_drift, get_currents_grid
 from services.gpx import generate_gpx
 from services.kml import generate_kml
+from services.accuracy import parse_gpx_coords, compare_tracks
+from services.wind import get_wind
 
 app = Flask(__name__, static_folder='ui_ux', static_url_path='')
 CORS(app)  # Allow cross-origin requests from any frontend
@@ -239,6 +241,71 @@ def objects():
     ])
 
 
+@app.route('/api/accuracy', methods=['POST'])
+def accuracy():
+    """Compare our drift prediction with a reference GPX track.
+    Expects JSON with:
+      - lat, lon, start_time, end_time, wind_speed, wind_direction, object_id
+      - reference_gpx: GPX file content as string
+    Returns comparison metrics.
+    """
+    data = request.get_json()
+
+    try:
+        start_pos = Coordinate(lat=data['lat'], lon=data['lon'])
+        start_time = datetime.fromisoformat(data['start_time'])
+        end_time = datetime.fromisoformat(data['end_time'])
+        wind = Wind(speed=data['wind_speed'], direction_deg=data['wind_direction'])
+        search_object = SEARCH_OBJECTS.get(data.get('object_id', 1))
+        is_reverse = data.get('is_reverse', False)
+        reference_gpx = data.get('reference_gpx', '')
+
+        if search_object is None:
+            return jsonify({"error": "Invalid object_id"}), 400
+        if not reference_gpx:
+            return jsonify({"error": "reference_gpx is required"}), 400
+
+    except (KeyError, ValueError) as e:
+        return jsonify({"error": f"Invalid input: {str(e)}"}), 400
+
+    # Calculate our drift prediction
+    our_positions = calculate_drift(
+        start_pos, start_time, end_time, wind, search_object, is_reverse=is_reverse
+    )
+
+    # Parse reference GPX
+    try:
+        ref_positions = parse_gpx_coords(reference_gpx)
+    except Exception as e:
+        return jsonify({"error": f"Failed to parse reference GPX: {str(e)}"}), 400
+
+    # Compare tracks
+    comparison = compare_tracks(our_positions, ref_positions)
+
+    return jsonify(comparison)
+
+
+@app.route('/api/wind', methods=['GET'])
+def wind():
+    """Fetch wind speed and direction from Open-Meteo for a given location and time.
+    Query params: lat, lon, time (ISO datetime string)
+    Returns: wind_speed_kts, wind_direction_deg, time_used
+    """
+    try:
+        lat = float(request.args.get('lat'))
+        lon = float(request.args.get('lon'))
+        time_str = request.args.get('time', '')
+        if not time_str:
+            return jsonify({"error": "time parameter is required"}), 400
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid lat/lon parameters"}), 400
+
+    try:
+        result = get_wind(lat, lon, time_str)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch wind data: {str(e)}"}), 500
+
+
 if __name__ == '__main__':
     app.run(debug=True)
-    
