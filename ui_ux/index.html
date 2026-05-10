@@ -38,6 +38,13 @@
       </svg>
     </button>
 
+    <button class="theme-toggle" id="accuracyToggle" aria-label="Testing Accuracy" title="Testing Accuracy">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+      </svg>
+    </button>
+
     <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="4"/>
@@ -159,7 +166,17 @@
         </section>
 
         <section class="form-section">
-          <div class="form-label">Wind</div>
+          <div class="form-label-row">
+            <div class="form-label">Wind</div>
+            <button type="button" class="btn-get-wind" id="btnGetWind">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/>
+                <path d="M9.6 4.6A2 2 0 1 1 11 8H2"/>
+                <path d="M12.6 19.4A2 2 0 1 0 14 16H2"/>
+              </svg>
+              Get Wind
+            </button>
+          </div>
           <div class="form-row">
             <label class="field">
               <span>Speed (kts)</span>
@@ -564,6 +581,142 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('acc-end').value = document.getElementById('inp-end').value;
 });
 </script>
+  <div class="card-wrap hidden" id="patternCardWrap">
+    <div class="card-backdrop"></div>
+    <div class="card card-small" role="dialog" aria-labelledby="patternCardTitle">
+      <div class="card-header">
+        <h2 class="card-title" id="patternCardTitle">Search <span>Patterns</span></h2>
+      </div>
+
+      <div class="card-body">
+        <p class="pattern-question">Generate search patterns with satellite tracks?</p>
+        <section class="form-section">
+          <div class="form-label">Spread radius</div>
+          <label class="field">
+            <span>Radius (nm)</span>
+            <input type="number" id="inpRadius" value="0.2" min="0.01" step="0.01">
+          </label>
+        </section>
+      </div>
+
+      <div class="card-actions">
+        <button type="button" class="btn-secondary" id="btnPatternNo">No</button>
+        <button type="button" class="btn-primary" id="btnPatternYes">Yes</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-wrap hidden" id="accuracyCardWrap">
+    <div class="card-backdrop"></div>
+    <div class="card" role="dialog" aria-labelledby="accuracyCardTitle">
+      <div class="card-header">
+        <h2 class="card-title" id="accuracyCardTitle">Testing <span>Accuracy</span></h2>
+        <button class="card-close" aria-label="Close">×</button>
+      </div>
+
+      <form class="card-form">
+        <section class="form-section">
+          <div class="form-label">Position</div>
+          <div class="form-row">
+            <label class="field">
+              <span>Lat</span>
+              <input type="number" id="inpAccLat" value="-36.8" step="0.000001">
+            </label>
+            <label class="field">
+              <span>Lon</span>
+              <input type="number" id="inpAccLon" value="174.8" step="0.000001">
+            </label>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="form-label">Time</div>
+          <div class="form-row">
+            <label class="field">
+              <span>Start</span>
+              <input type="datetime-local" id="inpAccStart">
+            </label>
+            <label class="field">
+              <span>End</span>
+              <input type="datetime-local" id="inpAccEnd">
+            </label>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="form-label">Wind</div>
+          <div class="form-row">
+            <label class="field">
+              <span>Speed (kts)</span>
+              <input type="number" id="inpAccWindSpeed" value="15" min="0" max="200">
+            </label>
+            <label class="field">
+              <span>Direction (°)</span>
+              <input type="number" id="inpAccWindDir" value="180" min="0" max="359">
+            </label>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="form-label">Object</div>
+          <label class="field">
+            <select id="inpAccObject"></select>
+          </label>
+        </section>
+
+        <div class="toggle-row">
+          <span>Reverse track</span>
+          <label class="toggle">
+            <input type="checkbox" id="inpAccReverse">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <section class="form-section">
+          <div class="form-label">Reference GPX</div>
+          <label class="field file-field">
+            <span>Upload GPX file</span>
+            <input type="file" id="inpGpxFile" accept=".gpx">
+          </label>
+        </section>
+
+        <div class="form-error hidden" id="accuracyFormError" role="alert"></div>
+
+        <button type="button" class="btn-primary" id="btnTestAccuracy">Test Accuracy</button>
+      </form>
+
+      <div class="accuracy-results hidden" id="accuracyResults">
+        <div class="results-header">Comparison Results</div>
+        <div class="results-grid">
+          <div class="result-item">
+            <span class="result-label">Accuracy</span>
+            <span class="result-value" id="resultAccuracy">—</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">Final Error</span>
+            <span class="result-value" id="resultFinalError">—</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">Mean Error</span>
+            <span class="result-value" id="resultMeanError">—</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">Max Error</span>
+            <span class="result-value" id="resultMaxError">—</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">Paired Points</span>
+            <span class="result-value" id="resultPairedPoints">—</span>
+          </div>
+          <div class="result-item">
+            <span class="result-label">Track Length</span>
+            <span class="result-value" id="resultTrackLength">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
