@@ -320,6 +320,12 @@
     </div>
   </div>
 
+<!-- Legacy script block from an earlier UI iteration. Was missing its opening
+     <script> tag and rendering as visible text underneath the map (flashed
+     through during pan/zoom/resize repaints). Wrapped in <template> so the
+     browser parses it but neither renders nor executes it. Safe to delete
+     once nobody intends to revive any of these handlers. -->
+<template id="legacy-ui-js">
 function setLoading(isLoading) {
     document.getElementById('loading-overlay').classList.toggle('hidden', !isLoading);
     document.getElementById('btn-calculate').disabled = isLoading;
@@ -563,7 +569,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('acc-start').value = document.getElementById('inp-start').value;
     document.getElementById('acc-end').value = document.getElementById('inp-end').value;
 });
-</script>
+</template>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,5 +1,36 @@
-// ── Map styles (light + dark variants of CARTO Voyager / Dark Matter)
-const MAP_STYLE_LIGHT = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+// ── Map styles
+//   Light: Esri's World Ocean Basemap (bathymetric chart with depth contours,
+//          seafloor place names) + the matching Reference layer (labels).
+//          Free for dev use, no API key, no signup. Renders as a true
+//          nautical chart, far more SAR-appropriate than a city basemap.
+//   Dark : Carto Dark Matter — the swap is jarring style-wise, but mirrors
+//          the original light/dark theme toggle behaviour.
+// Esri Ocean tiles only go to z13; clamp here so MapLibre overzooms the
+// final level instead of fetching missing tiles and rendering a "no data"
+// placeholder.
+const ESRI_OCEAN_MAX_Z = 13;
+const MAP_STYLE_LIGHT = {
+  version: 8,
+  sources: {
+    'esri-ocean-base': {
+      type: 'raster',
+      tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}'],
+      tileSize: 256,
+      maxzoom: ESRI_OCEAN_MAX_Z,
+      attribution: 'Tiles © Esri — GEBCO, NOAA, NGS et al.',
+    },
+    'esri-ocean-reference': {
+      type: 'raster',
+      tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}'],
+      tileSize: 256,
+      maxzoom: ESRI_OCEAN_MAX_Z,
+    },
+  },
+  layers: [
+    { id: 'esri-ocean-base',      type: 'raster', source: 'esri-ocean-base' },
+    { id: 'esri-ocean-reference', type: 'raster', source: 'esri-ocean-reference' },
+  ],
+};
 const MAP_STYLE_DARK  = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
 const map = new maplibregl.Map({
@@ -7,6 +38,8 @@ const map = new maplibregl.Map({
   style: MAP_STYLE_LIGHT,
   center: [174.85, -36.82],
   zoom: 11.5,
+  minZoom: 3,         // any further out and Esri returns text errors at world edges
+  maxZoom: 17,        // overzoom past Esri's z13 cap (tiles get soft, but no missing-data placeholder)
   attributionControl: false,
 });
 
@@ -56,6 +89,30 @@ function ensureArrowImage() {
 }
 map.on('load',  ensureArrowImage);
 map.on('style.load', ensureArrowImage);   // re-add after theme switch
+
+
+// ── OpenSeaMap seamark overlay (lighthouses, buoys, channels, hazards).
+// Sits on top of whichever base style is active so the chart-style icons
+// stay visible across light/dark themes.
+function ensureSeamarks() {
+  if (map.getSource('seamarks')) return;
+  map.addSource('seamarks', {
+    type: 'raster',
+    tiles: ['https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png'],
+    tileSize: 256,
+    minzoom: 6,        // marks are visual clutter at world view; only show once you're zoomed in to coast level
+    maxzoom: 18,
+    attribution: '© OpenSeaMap contributors',
+  });
+  map.addLayer({
+    id: 'seamarks',
+    type: 'raster',
+    source: 'seamarks',
+    paint: { 'raster-opacity': 0.85 },
+  });
+}
+map.on('load', ensureSeamarks);
+map.on('style.load', ensureSeamarks);
 
 
 // ── Theme toggle
