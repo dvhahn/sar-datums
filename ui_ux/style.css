@@ -1110,7 +1110,7 @@ body {
   color: var(--color-text);
   display: inline-flex;
   align-items: center;
-  justify-content: center;     /* center text horizontally */
+  justify-content: center;
   text-align: center;
   width: 370px;
   min-width: 370px;
@@ -1118,7 +1118,6 @@ body {
 }
 
 .btn-outline {
-  /* same styling, but without fixed width – or you can set it too */
   padding: 8px 12px;
   line-height: 1.2;
   font-size: 13px;
@@ -1178,7 +1177,7 @@ body {
 }
 
 .picker-level button.selected-item {
-  background-color: var(--color-accent);
+  background: var(--color-accent);
   color: #fff;
 }
 
