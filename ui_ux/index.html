@@ -154,14 +154,29 @@
         <section class="form-section">
           <div class="form-label">Time</div>
           <div class="form-row">
-            <label class="field">
-              <span>Start</span>
-              <input type="datetime-local" id="inpStart">
-            </label>
-            <label class="field">
-              <span>End</span>
-              <input type="datetime-local" id="inpEnd">
-            </label>
+            <div id="normalStartWrapper" class="field">
+              <span>Start (LKP)</span>
+              <input type="datetime-local" id="inpStart" step="60">
+            </div>
+            <div class="field">
+              <span>Arrival (End)</span>
+              <input type="datetime-local" id="inpEnd" step="60">
+            </div>
+          </div>
+
+          <div id="uncertainTimes" class="form-section hidden">
+            <div class="form-label">Uncertain LKP range</div>
+            <div class="form-row">
+              <div class="field">
+                <span>Earliest LKP</span>
+                <input type="datetime-local" id="inpEarliestLKP" step="60">
+              </div>
+              <div class="field">
+                <span>Latest LKP</span>
+                <input type="datetime-local" id="inpLatestLKP" step="60">
+              </div>
+            </div>
+            <div class="form-label" style="margin-top:8px">Arrival time (unchanged)</div>
           </div>
         </section>
 
@@ -227,6 +242,14 @@
           <span>Add divergence (±30°)</span>
           <label class="toggle">
             <input type="checkbox" id="chkDivergence">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <span>Time uncertain (earliest & latest LKP)</span>
+          <label class="toggle">
+            <input type="checkbox" id="chkTimeUncertain">
             <span class="toggle-slider"></span>
           </label>
         </div>

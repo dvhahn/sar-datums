@@ -358,6 +358,39 @@ btnChangeObject.addEventListener('click', () => {
   if (fullTree.length) renderCurrentLevel();
 });
 
+// Helper to send a drift request and return data
+async function fetchDrift(startTime, endTime) {
+  const res = await fetch('/api/drift', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lat: parseFloat(inpLat.value),
+      lon: parseFloat(inpLon.value),
+      start_time: startTime,
+      end_time: endTime,
+      wind_speed: parseFloat(inpWindSpeed.value),
+      wind_direction: parseFloat(inpWindDir.value),
+      object_id: parseInt(selectedObjectIdInput.value, 10),
+      is_reverse: inpReverse.checked,
+      multiple_tracks: inpMultipleTracks.checked,
+      radius_nm: parseFloat(inpRadius.value),
+      wind_divergence: chkDivergence.checked,
+      divergence_angle: 30,
+    }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
+  return res.json();
+}
+
+const datetimeInputs = ['inpStart', 'inpEnd', 'inpEarliestLKP', 'inpLatestLKP'];
+datetimeInputs.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') e.preventDefault();
+    });
+  }
+});
 
 // ── Card open / close
 function openCard() {
@@ -777,50 +810,60 @@ btnCalculate.addEventListener('click', async () => {
   btnCalculate.textContent = 'Calculating…';
 
   try {
-    // Backend expects start_time > end_time when reverse is on.
-    // Keep the form natural (earlier → later) and swap here.
     const isReverse = inpReverse.checked;
-    const earlier = inpStart.value + ':00';
-    const later   = inpEnd.value + ':00';
-    const startTime = isReverse ? later   : earlier;
-    const endTime   = isReverse ? earlier : later;
+    const meta = {
+        isReverse: isReverse,
+        startLat: parseFloat(inpLat.value),
+        startLon: parseFloat(inpLon.value),
+    };
 
-    const res = await fetch('/api/drift', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        lat:              parseFloat(inpLat.value),
-        lon:              parseFloat(inpLon.value),
-        start_time:       startTime,
-        end_time:         endTime,
-        wind_speed:       parseFloat(inpWindSpeed.value),
-        wind_direction:   parseFloat(inpWindDir.value),
-        object_id:        parseInt(selectedObjectIdInput.value, 10),
-        is_reverse:       isReverse,
-        multiple_tracks:  inpMultipleTracks.checked,
-        radius_nm:        parseFloat(inpRadius.value),
-        wind_divergence:   chkDivergence.checked,
-        divergence_angle: 30,
-      }),
-    });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
+    if(chkTimeUncertain.checked) {
+      const earliestLKP = document.getElementById('inpEarliestLKP').value;
+        const latestLKP = document.getElementById('inpLatestLKP').value;
+        const arrival = inpEnd.value;
+        if(!earliestLKP || !latestLKP || !arrival) throw new Error('Please fill in all time fields');
 
-    // Grab the per-run GPX/KML right away so later calcs don't overwrite them.
-    const [gpxText, kmlText] = await Promise.all([
-      fetch('/api/gpx').then(r => r.text()),
-      fetch('/api/kml').then(r => r.text()),
-    ]);
+        const times = [
+          { start: earliestLKP, end: arrival },
+          { start: latestLKP, end: arrival }
+        ];
+        const runPromises = times.map(async ({ start,end }) => {
+          let startTime = start + ':00';
+          let endTime = end + ':00';
+          if(isReverse){
+              [startTime, endTime] = [endTime, startTime];
+          }
+          const data = await fetchDrift(startTime, endTime);
+          const [gpxText, kmlText] = await Promise.all([
+                fetch('/api/gpx').then(r => r.text()),
+                fetch('/api/kml').then(r => r.text()),
+          ]);
+          const gpxUrl = makeBlobUrl(gpxText, 'application/gpx+xml');
+          const kmlUrl = makeBlobUrl(kmlText, 'application/vnd.google-earth.kml+xml');
 
-    addRun(data, {
-      isReverse: inpReverse.checked,
-      startLat: parseFloat(inpLat.value),
-      startLon: parseFloat(inpLon.value),
-      gpxUrl: makeBlobUrl(gpxText, 'application/gpx+xml'),
-      kmlUrl: makeBlobUrl(kmlText, 'application/vnd.google-earth.kml+xml'),
-    });
+          return { data, gpxUrl, kmlUrl};
+        });
 
+        const results = await Promise.all(runPromises);
+        results.forEach(({ data, gpxUrl, kmlUrl }) => {
+            addRun(data, { ...meta, gpxUrl, kmlUrl });
+        });
+    } else {
+      // Normal single-run mode
+        const earlier = inpStart.value + ':00';
+        const later = inpEnd.value + ':00';
+        const startTime = isReverse ? later : earlier;
+        const endTime = isReverse ? earlier : later;
+        const data = await fetchDrift(startTime, endTime);
+        const [gpxText, kmlText] = await Promise.all([
+            fetch('/api/gpx').then(r => r.text()),
+            fetch('/api/kml').then(r => r.text()),
+        ]);
+        const gpxUrl = makeBlobUrl(gpxText, 'application/gpx+xml');
+        const kmlUrl = makeBlobUrl(kmlText, 'application/vnd.google-earth.kml+xml');
+        addRun(data, { ...meta, gpxUrl, kmlUrl });
+    }
     closeCard();
   } catch (err) {
     showError(err.message);
@@ -962,7 +1005,7 @@ function drawRun(run) {
       type: 'line',
       source: posLayerId,
       paint: {
-        'line-color': '#ff9f0a',   // orange
+        'line-color': '#a0a0a0',   // gray
         'line-width': 2.5,
         'line-dasharray': [6, 4],
         'line-opacity': 0.7,
@@ -988,7 +1031,7 @@ function drawRun(run) {
       type: 'line',
       source: negLayerId,
       paint: {
-        'line-color': '#ff453a',   // red
+        'line-color': '#606060',   // darker gray
         'line-width': 2.5,
         'line-dasharray': [6, 4],
         'line-opacity': 0.7,
@@ -1346,3 +1389,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (res.ok) fullTree = await res.json();
   } catch (e) { console.error('Preload hierarchy failed', e); }
 });
+
+const normalStartWrapper = document.getElementById('normalStartWrapper');
+const uncertainTimesDiv = document.getElementById('uncertainTimes');
+const chkTimeUncertain = document.getElementById('chkTimeUncertain');
+const inpEarliestLKP = document.getElementById('inpEarliestLKP');
+const inpLatestLKP = document.getElementById('inpLatestLKP');
+
+function setDefaultUncertainTimes() {
+  const start = inpStart.value;
+  if (start) {
+    const startDate = new Date(start);
+    if (!isNaN(startDate)) {
+      const earliest = new Date(startDate.getTime() - 2 * 60 * 60 * 1000); // 2 hours earlier
+      inpEarliestLKP.value = toLocalDatetime(earliest);
+      inpLatestLKP.value = toLocalDatetime(startDate);
+    }
+  }
+}
+
+chkTimeUncertain.addEventListener('change', () => {
+  const isUncertain = chkTimeUncertain.checked;
+  normalStartWrapper.style.display = isUncertain ? 'none' : 'block';
+  uncertainTimesDiv.classList.toggle('hidden', !isUncertain);
+  if (isUncertain) setDefaultUncertainTimes();
+});
+
+inpStart.addEventListener('change', setDefaultUncertainTimes);
+
+setDefaultUncertainTimes();

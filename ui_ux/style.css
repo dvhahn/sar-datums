@@ -1100,15 +1100,46 @@ body {
 }
 
 .selected-object-name {
-  display: inline-block;
-  padding: 10px 14px;
-  font-weight: 500;
   background: var(--color-hover);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
   font-family: var(--font-mono);
   font-size: 13px;
+  padding: 8px 12px;
+  line-height: 1.2;
   color: var(--color-text);
-  margin-right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;     /* center text horizontally */
+  text-align: center;
+  width: 370px;
+  min-width: 370px;
+  box-sizing: border-box;
+}
+
+.btn-outline {
+  /* same styling, but without fixed width – or you can set it too */
+  padding: 8px 12px;
+  line-height: 1.2;
+  font-size: 13px;
+  font-family: var(--font-ui);
+  background: var(--color-hover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 370px;
+  min-width: 370px;
+}
+
+#object-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .object-picker {
@@ -1147,7 +1178,7 @@ body {
 }
 
 .picker-level button.selected-item {
-  background: var(--color-accent);
+  background-color: var(--color-accent);
   color: #fff;
 }
 
@@ -1301,4 +1332,29 @@ body {
 .btn-get-wind.loading {
   opacity: 0.6;
   pointer-events: none;
+}
+
+#uncertainTimes {
+  margin-top: 8px;
+  padding: 8px 4px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+}
+
+#uncertainTimes .form-row {
+  gap: 6px;
+}
+
+#uncertainTimes .field input {
+  margin-bottom: 8px 10px;
+  font-size: 12px;
+}
+
+#uncertainTimes .form-label {
+  margin-top: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-dim);
 }
