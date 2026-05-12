@@ -484,16 +484,6 @@ def accuracy():
 
     return jsonify(result)
 
-if __name__ == '__main__':
-    # host='0.0.0.0' makes it accessible to the internet
-    # port=5000 is the standard Flask port
-    app.run(host='0.0.0.0', port=5000, debug=False)
-
-'''
-if __name__ == '__main__':
-    # Use debug=True for local development to get automatic restarts
-    app.run(host='localhost', port=5000, debug=True)
-'''
     # Calculate our drift prediction
     our_positions = calculate_drift(
         start_pos, start_time, end_time, wind, search_object, is_reverse=is_reverse
@@ -532,6 +522,14 @@ def wind():
     except Exception as e:
         return jsonify({"error": f"Failed to fetch wind data: {str(e)}"}), 500
 
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    # host='0.0.0.0' makes it accessible to the internet
+    # port=5000 is the standard Flask port
+    app.run(host='0.0.0.0', port=5000, debug=False)
+
+'''
+if __name__ == '__main__':
+    # Use debug=True for local development to get automatic restarts
+    app.run(host='localhost', port=5000, debug=True)
+'''
+
