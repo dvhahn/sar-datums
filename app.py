@@ -412,7 +412,7 @@ def object_hierarchy():
             nodes[row[2]]["children"].append(node)
     return jsonify(tree)
 
-
+'''
 @app.route('/api/accuracy', methods=['POST'])
 def accuracy():
     """Compare our drift result against a reference GPX file.
@@ -499,7 +499,7 @@ def accuracy():
     comparison = compare_tracks(our_positions, ref_positions)
 
     return jsonify(comparison)
-
+'''
 
 @app.route('/api/wind', methods=['GET'])
 def wind():
