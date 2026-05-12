@@ -1,15 +1,18 @@
-// ── Map styles
-//   Light: Esri's World Ocean Basemap (bathymetric chart with depth contours,
-//          seafloor place names) + the matching Reference layer (labels).
-//          Free for dev use, no API key, no signup. Renders as a true
-//          nautical chart, far more SAR-appropriate than a city basemap.
-//   Dark : Carto Dark Matter — the swap is jarring style-wise, but mirrors
-//          the original light/dark theme toggle behaviour.
+// ── Map style — Esri's World Ocean Basemap (bathymetric chart with depth
+// contours and seafloor place names) plus the matching Reference layer
+// (labels). Free for dev use, no API key. Renders as a true nautical
+// chart, far more SAR-appropriate than a city basemap.
+//
 // Esri Ocean tiles only go to z13; clamp here so MapLibre overzooms the
 // final level instead of fetching missing tiles and rendering a "no data"
 // placeholder.
+//
+// We dropped the original light/dark theme toggle: Esri Ocean has no dark
+// variant, and the only sensible fallback (Carto Dark Matter) made the two
+// modes feel like different products. The toggle slot now controls
+// seamark visibility instead — see seamarksToggle below.
 const ESRI_OCEAN_MAX_Z = 13;
-const MAP_STYLE_LIGHT = {
+const MAP_STYLE = {
   version: 8,
   sources: {
     'esri-ocean-base': {
@@ -31,11 +34,10 @@ const MAP_STYLE_LIGHT = {
     { id: 'esri-ocean-reference', type: 'raster', source: 'esri-ocean-reference' },
   ],
 };
-const MAP_STYLE_DARK  = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
 const map = new maplibregl.Map({
   container: 'map',
-  style: MAP_STYLE_LIGHT,
+  style: MAP_STYLE,
   center: [174.85, -36.82],
   zoom: 11.5,
   minZoom: 3,         // any further out and Esri returns text errors at world edges
@@ -115,24 +117,29 @@ map.on('load', ensureSeamarks);
 map.on('style.load', ensureSeamarks);
 
 
-// ── Theme toggle
-const themeToggle = document.getElementById('themeToggle');
-const storedTheme = localStorage.getItem('theme');
-if (storedTheme === 'dark') applyTheme('dark');
+// ── Seamarks toggle (replaces the original light/dark theme toggle — Esri
+// Ocean has no dark variant, so we repurposed the slot for something
+// SAR-actually-relevant: show/hide the OpenSeaMap overlay on demand).
+const seamarksToggle = document.getElementById('seamarksToggle');
+let seamarksOn = localStorage.getItem('seamarks') !== 'off';   // default ON
+applySeamarkVisibility();
+if (seamarksOn) seamarksToggle.classList.add('active');
 
-themeToggle.addEventListener('click', () => {
-  const next = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
-  applyTheme(next);
-  localStorage.setItem('theme', next);
+seamarksToggle.addEventListener('click', () => {
+  seamarksOn = !seamarksOn;
+  seamarksToggle.classList.toggle('active', seamarksOn);
+  localStorage.setItem('seamarks', seamarksOn ? 'on' : 'off');
+  applySeamarkVisibility();
 });
 
-function applyTheme(theme) {
-  document.body.dataset.theme = theme;
-  const newStyle = theme === 'dark' ? MAP_STYLE_DARK : MAP_STYLE_LIGHT;
-  map.setStyle(newStyle);
-  // After style change, re-draw all runs (map loses custom layers on setStyle).
-  map.once('styledata', redrawAllRuns);
+function applySeamarkVisibility() {
+  if (!map.getLayer('seamarks')) return;   // layer may not have loaded yet
+  map.setLayoutProperty('seamarks', 'visibility', seamarksOn ? 'visible' : 'none');
 }
+// Re-apply after the map (re-)loads style — keeps the user's choice across
+// any future style swaps and the initial load race.
+map.on('load',       applySeamarkVisibility);
+map.on('style.load', applySeamarkVisibility);
 
 
 // ── Currents toggle
