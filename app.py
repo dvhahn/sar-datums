@@ -13,8 +13,8 @@ from services.circ import generate_expanding_circle
 from services.lne import generate_creeping_line
 from services.squ import generate_expanding_square
 from services.sect import generate_sector_search
-from database.db_config import get_connection
 from services.wind import get_wind
+from database.db_config import get_connection
 
 app = Flask(__name__, static_folder='ui_ux', static_url_path='')
 CORS(app)  # Allow cross-origin requests from any frontend
@@ -412,7 +412,7 @@ def object_hierarchy():
             nodes[row[2]]["children"].append(node)
     return jsonify(tree)
 
-'''
+
 @app.route('/api/accuracy', methods=['POST'])
 def accuracy():
     """Compare our drift result against a reference GPX file.
@@ -442,34 +442,11 @@ def accuracy():
 
         if search_object is None:
             return jsonify({"error": "Invalid object_id"}), 400
-@app.route('/api/accuracy', methods=['POST'])
-def accuracy():
-    """Compare our drift prediction with a reference GPX track.
-    Expects JSON with:
-      - lat, lon, start_time, end_time, wind_speed, wind_direction, object_id
-      - reference_gpx: GPX file content as string
-    Returns comparison metrics.
-    """
-    data = request.get_json()
-
-    try:
-        start_pos = Coordinate(lat=data['lat'], lon=data['lon'])
-        start_time = datetime.fromisoformat(data['start_time'])
-        end_time = datetime.fromisoformat(data['end_time'])
-        wind = Wind(speed=data['wind_speed'], direction_deg=data['wind_direction'])
-        search_object = SEARCH_OBJECTS.get(data.get('object_id', 1))
-        is_reverse = data.get('is_reverse', False)
-        reference_gpx = data.get('reference_gpx', '')
-
-        if search_object is None:
-            return jsonify({"error": "Invalid object_id"}), 400
-        if not reference_gpx:
-            return jsonify({"error": "reference_gpx is required"}), 400
 
     except (KeyError, ValueError) as e:
         return jsonify({"error": f"Invalid input: {str(e)}"}), 400
 
-    our_positions = calculate_drift(
+    our_positions, _ = calculate_drift(
         start_pos,
         start_time,
         end_time,
@@ -478,28 +455,11 @@ def accuracy():
         target=db_target
     )
 
-    our_coords = our_positions
-    result = compare_tracks(our_coords, ref_coords)
+    result = compare_tracks(our_positions, ref_coords)
     result['database_queried'] = db_target
 
     return jsonify(result)
 
-    # Calculate our drift prediction
-    our_positions = calculate_drift(
-        start_pos, start_time, end_time, wind, search_object, is_reverse=is_reverse
-    )
-
-    # Parse reference GPX
-    try:
-        ref_positions = parse_gpx_coords(reference_gpx)
-    except Exception as e:
-        return jsonify({"error": f"Failed to parse reference GPX: {str(e)}"}), 400
-
-    # Compare tracks
-    comparison = compare_tracks(our_positions, ref_positions)
-
-    return jsonify(comparison)
-'''
 
 @app.route('/api/wind', methods=['GET'])
 def wind():
@@ -522,6 +482,7 @@ def wind():
     except Exception as e:
         return jsonify({"error": f"Failed to fetch wind data: {str(e)}"}), 500
 
+
 if __name__ == '__main__':
     # host='0.0.0.0' makes it accessible to the internet
     # port=5000 is the standard Flask port
@@ -532,4 +493,3 @@ if __name__ == '__main__':
     # Use debug=True for local development to get automatic restarts
     app.run(host='localhost', port=5000, debug=True)
 '''
-

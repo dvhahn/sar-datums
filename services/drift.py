@@ -129,7 +129,14 @@ def _calculate_rratio(tide_range: float, config: dict, is_ebb: bool):
 
 
 def _find_nearest_vectors(cur, lat: float, lon: float, neap_time_step: float, spring_time_step: float):
-    """Find the tidal current vectors at the nearest grid point."""
+    """Find the tidal current vectors at the nearest grid point.
+
+    Neap and Spring are queried at *different* time_step indices because Peter's
+    VBA picks columns separately for each section (Datums.cls computes
+    Datums.Cells(rw, clA + 3) for Neap and clA + 4 for Spring). Returns
+    (neap_vx, neap_vy, spring_vx, spring_vy).
+    """
+    # Step 1: Find nearest grid point from locations table (207K rows, fast).
     cur.execute("""
         SELECT lat, lon
         FROM locations
@@ -143,23 +150,19 @@ def _find_nearest_vectors(cur, lat: float, lon: float, neap_time_step: float, sp
 
     nearest_lat, nearest_lon = nearest
 
+    # time_step column is REAL (float4); cast the float8 params so equality
+    # matches values like 0.1, 1.7 that don't round-trip across precisions.
     cur.execute("""
         SELECT tide_type, vx, vy
         FROM tidal_vectors
         WHERE lat = %s AND lon = %s
-          AND (
-            (tide_type = 'neap' AND ABS(time_step - %s) < 0.001)
-            OR
-            (tide_type = 'spring' AND ABS(time_step - %s) < 0.001)
-          )
+          AND ((tide_type = 'neap'   AND time_step = %s::real)
+            OR (tide_type = 'spring' AND time_step = %s::real))
     """, (nearest_lat, nearest_lon, neap_time_step, spring_time_step))
-
-    rows = cur.fetchall()
 
     neap_vx, neap_vy = 0.0, 0.0
     spring_vx, spring_vy = 0.0, 0.0
-
-    for tide_type, vx, vy in rows:
+    for tide_type, vx, vy in cur.fetchall():
         if tide_type == 'neap':
             neap_vx, neap_vy = vx, vy
         elif tide_type == 'spring':
@@ -169,24 +172,40 @@ def _find_nearest_vectors(cur, lat: float, lon: float, neap_time_step: float, sp
 
 
 def get_tidal_current(cur, lat: float, lon: float, current_time: datetime, config: dict) -> CurrentVector:
-    """Retrieve interpolated tidal current vector for a given position and time."""
+    """Retrieve interpolated tidal current vector for a given position and time.
+
+    Steps:
+    1. Find bracketing tide heights (which HW/LW are we between?)
+    2. Calculate time_step (where in the tidal cycle are we?)
+    3. Calculate RRatio (how much Spring vs Neap?)
+    4. Find nearest grid point and read Neap + Spring vectors
+    5. Interpolate and return final current vector
+
+    See VBA: VADatums + Data.Find
+    """
+    # Step 1: Find bracketing tides
     brackets = _find_bracketing_tides(cur, current_time)
     if brackets is None:
         return CurrentVector(0, 0)
 
     prev_time, prev_height, next_time, next_height = brackets
 
+    # Step 2: Calculate Neap and Spring time_steps separately.
     neap_ts, spring_ts, is_ebb, _ = _calculate_time_steps(
         current_time, prev_time, prev_height, next_time, next_height
     )
 
+    # Step 3: Calculate Spring/Neap interpolation ratio
     tide_range = next_height - prev_height
     rratio = _calculate_rratio(tide_range, config, is_ebb)
 
+    # Step 4: Find nearest vectors (Neap and Spring use different time_steps).
     neap_vx, neap_vy, spring_vx, spring_vy = _find_nearest_vectors(
         cur, lat, lon, neap_ts, spring_ts
     )
 
+    # Step 5: Interpolate between Neap and Spring
+    # VBA: x = ((spring_x - neap_x) * RRatio) + neap_x
     vx = neap_vx + (spring_vx - neap_vx) * rratio
     vy = neap_vy + (spring_vy - neap_vy) * rratio
 
@@ -194,7 +213,10 @@ def get_tidal_current(cur, lat: float, lon: float, current_time: datetime, confi
 
 
 def _grid_step_for_bbox(bbox_width: float) -> float:
-    """Pick a stable grid step in degrees based on bbox width."""
+    """Pick a stable grid step (degrees) from a discrete ladder based on bbox width.
+    Cells are anchored to the global (0, 0) origin so panning never reshuffles arrows;
+    only crossing a width threshold (i.e. zooming) triggers a step change.
+    """
     for threshold, step in ((1.0, 0.04), (0.4, 0.02), (0.1, 0.01), (0.05, 0.005)):
         if bbox_width >= threshold:
             return step
@@ -203,40 +225,36 @@ def _grid_step_for_bbox(bbox_width: float) -> float:
 
 def get_currents_grid(
     sample_time: datetime,
-    lat_min: float,
-    lat_max: float,
-    lon_min: float,
-    lon_max: float,
+    lat_min: float, lat_max: float,
+    lon_min: float, lon_max: float,
     target: str = "local",
 ) -> list[dict]:
-    """Sample tidal currents at a grid of points within the bbox for map arrows."""
+    """Sample tidal currents at a grid of points within the bbox for `sample_time`.
+    Returns one entry per cell with speed (knots) and compass bearing (degrees).
+    """
     conn = get_connection(target=target)
     cur = conn.cursor()
-
     try:
         config = _get_config(cur)
 
         brackets = _find_bracketing_tides(cur, sample_time)
         if brackets is None:
             return []
-
         prev_time, prev_height, next_time, next_height = brackets
-
         neap_ts, spring_ts, is_ebb, _ = _calculate_time_steps(
             sample_time, prev_time, prev_height, next_time, next_height
         )
-
         tide_range = next_height - prev_height
         rratio = _calculate_rratio(tide_range, config, is_ebb)
 
         width = lon_max - lon_min
         height = lat_max - lat_min
-
         if width <= 0 or height <= 0:
             return []
-
         step = _grid_step_for_bbox(max(width, height))
 
+        # Globally-anchored grid: FLOOR(coord / step) gives the same cell index for
+        # any coord regardless of bbox position, so panning yields stable points.
         cur.execute("""
             SELECT DISTINCT ON (
                 FLOOR(lat / %s),
@@ -247,79 +265,56 @@ def get_currents_grid(
               AND lon BETWEEN %s AND %s
             ORDER BY FLOOR(lat / %s), FLOOR(lon / %s), lat, lon
         """, (
-            step,
-            step,
-            lat_min,
-            lat_max,
-            lon_min,
-            lon_max,
-            step,
-            step,
+            step, step,
+            lat_min, lat_max, lon_min, lon_max,
+            step, step,
         ))
-
         points = cur.fetchall()
         if not points:
             return []
 
-        values_sql = ",".join(["(%s, %s)"] * len(points))
-        values_params = []
-        for lat, lon in points:
-            values_params.extend([lat, lon])
-
+        # One round-trip for all neap+spring vectors. Neap and Spring use
+        # different time_step indices (Peter's VBA picks columns separately
+        # for each), so the WHERE clause filters per tide_type.
+        values_sql = ','.join(f'({lat}, {lon})' for lat, lon in points)
         cur.execute(f"""
             SELECT lat, lon, tide_type, vx, vy
             FROM tidal_vectors
             WHERE (lat, lon) IN (VALUES {values_sql})
-              AND (
-                (tide_type = 'neap' AND ABS(time_step - %s) < 0.001)
-                OR
-                (tide_type = 'spring' AND ABS(time_step - %s) < 0.001)
-              )
-        """, (*values_params, neap_ts, spring_ts))
+              AND ((tide_type = 'neap'   AND time_step = %s::real)
+                OR (tide_type = 'spring' AND time_step = %s::real))
+        """, (neap_ts, spring_ts))
 
         by_point: dict = {}
-
         for lat, lon, tide_type, vx, vy in cur.fetchall():
             entry = by_point.setdefault((float(lat), float(lon)), {})
             entry[tide_type] = (float(vx), float(vy))
 
         result = []
-
         for (lat, lon), vectors in by_point.items():
-            neap_vx, neap_vy = vectors.get("neap", (0.0, 0.0))
-            spring_vx, spring_vy = vectors.get("spring", (0.0, 0.0))
-
+            neap_vx, neap_vy = vectors.get('neap', (0.0, 0.0))
+            spring_vx, spring_vy = vectors.get('spring', (0.0, 0.0))
             vx = neap_vx + (spring_vx - neap_vx) * rratio
             vy = neap_vy + (spring_vy - neap_vy) * rratio
-
             speed_kt = math.sqrt(vx * vx + vy * vy) * 3600 / 1852
             bearing_deg = (math.degrees(math.atan2(vx, vy)) + 360) % 360
-
-            if speed_kt <= 0.001:
-                continue
-
             result.append({
-                "lat": lat,
-                "lon": lon,
-                "speed_kt": round(speed_kt, 2),
-                "bearing_deg": round(bearing_deg, 1),
+                'lat': lat,
+                'lon': lon,
+                'speed_kt': round(speed_kt, 2),
+                'bearing_deg': round(bearing_deg, 1),
             })
-
         return result
-
     finally:
         cur.close()
         conn.close()
 
 
-def apply_drift_step(
-    position: Coordinate,
-    current: CurrentVector,
-    leeway: CurrentVector,
-    time_delta_seconds: float,
-    multiplier: float = 1.0,
-) -> Coordinate:
-    """Calculate new position after drifting for time_delta_seconds."""
+def apply_drift_step(position: Coordinate, current: CurrentVector, leeway: CurrentVector, time_delta_seconds: float, multiplier: float = 1.0) -> Coordinate:
+    """Calculate new position after drifting for time_delta_seconds.
+    Combines tidal current + wind leeway, converts to lat/lon displacement.
+    """
+    # Apply the multiplier to the total vectors
     total_vx = (current.vx + leeway.vx) * multiplier
     total_vy = (current.vy + leeway.vy) * multiplier
 
@@ -330,7 +325,6 @@ def apply_drift_step(
     new_lon = position.lon + ((dx / METRES_PER_DEGREE_LAT) / math.cos(math.radians(position.lat)))
 
     return Coordinate(new_lat, new_lon)
-
 
 def calculate_drift(
     start_position,
@@ -343,13 +337,30 @@ def calculate_drift(
     wind_divergence=False,
     divergence_angle_override=None,
 ):
-    """Walk a drifting object forward or backward in time."""
+    """Walk a drifting object forward (or backward) in time.
+
+    Step length adapts to the current ebb/flood cycle, mirroring Peter's VBA
+    `TmPeriod = (NxtTm - TideTm) / ColCount(...)`. Each iteration advances by
+    one reference column's worth of the *current* cycle, so a longer cycle
+    produces longer steps. Steps also snap to cycle boundaries and end_time so
+    Neap/Spring lookups always reference a single cycle.
+
+    `target` selects the DB pool ('local' or 'aws') via database.db_config.
+
+    `wind_divergence=True` runs the same drift loop with the leeway vector
+    rotated by ±divergence_angle (a SearchObject.divergence_angle override is
+    accepted explicitly). The two divergence tracks are stashed in a module-
+    level global readable via get_last_divergence_tracks(); only the primary
+    "normal" track is returned, so existing callers keep working.
+
+    Returns (positions, timestamps) — same length, parallel lists. Timestamps
+    are no longer uniform 0.1h, so callers must use them directly instead of
+    assuming a fixed cadence.
+    """
     global _last_divergence_tracks
 
     base_leeway = calculate_leeway(wind, search_object)
-
     leeway_variants = [("normal", base_leeway)]
-
     if wind_divergence:
         angle = divergence_angle_override if divergence_angle_override is not None else search_object.divergence_angle
         if angle != 0:
@@ -358,24 +369,23 @@ def calculate_drift(
 
     sign = -1 if is_reverse else 1
     multiplier = float(sign)
-    max_iters = 5000
+    # Safety: bound iterations so a degenerate cycle can't spin forever.
+    MAX_ITERS = 5000
 
     conn = get_connection(target=target)
     cur = conn.cursor()
-
     try:
         config = _get_config(cur)
 
         all_tracks = {}
         all_timestamps = {}
-
         for name, leeway in leeway_variants:
             positions = [start_position]
             timestamps = [start_time]
             current_position = start_position
             current_time = start_time
 
-            for _ in range(max_iters):
+            for _ in range(MAX_ITERS):
                 if sign > 0 and current_time >= end_time:
                     break
                 if sign < 0 and current_time <= end_time:
@@ -384,49 +394,38 @@ def calculate_drift(
                 brackets = _find_bracketing_tides(cur, current_time)
                 if brackets is None:
                     break
-
                 prev_time, prev_height, next_time, next_height = brackets
 
                 is_ebb = (next_height - prev_height) < 0
                 cycle_seconds = (next_time - prev_time).total_seconds()
-
+                # TmPeriod uses the Neap reference column count (matches VBA
+                # when SpNp picks Neap; the Spring branch differs by ~1
+                # column in practice, well below per-step accuracy noise).
                 col_count = NEAP_EBB_COLS if is_ebb else NEAP_FLOOD_COLS
                 tm_period_seconds = cycle_seconds / col_count if col_count else 360
 
+                # Compute step end, capped at the cycle boundary AND end_time.
                 step_delta = timedelta(seconds=tm_period_seconds * sign)
                 next_step_time = current_time + step_delta
-
                 if sign > 0:
-                    if next_step_time > next_time:
-                        next_step_time = next_time
-                    if next_step_time > end_time:
-                        next_step_time = end_time
+                    if next_step_time > next_time: next_step_time = next_time
+                    if next_step_time > end_time:  next_step_time = end_time
                 else:
-                    if next_step_time < prev_time:
-                        next_step_time = prev_time
-                    if next_step_time < end_time:
-                        next_step_time = end_time
+                    if next_step_time < prev_time: next_step_time = prev_time
+                    if next_step_time < end_time:  next_step_time = end_time
 
                 actual_seconds = abs((next_step_time - current_time).total_seconds())
-
                 if actual_seconds < 1:
+                    # Stuck on a cycle boundary; nudge past so the next iter
+                    # picks up the new HW/LW pair.
                     current_time = current_time + timedelta(seconds=sign)
                     continue
 
                 tidal_current = get_tidal_current(
-                    cur,
-                    current_position.lat,
-                    current_position.lon,
-                    current_time,
-                    config,
+                    cur, current_position.lat, current_position.lon, current_time, config
                 )
-
                 current_position = apply_drift_step(
-                    current_position,
-                    tidal_current,
-                    leeway,
-                    actual_seconds,
-                    multiplier,
+                    current_position, tidal_current, leeway, actual_seconds, multiplier
                 )
 
                 positions.append(current_position)
@@ -436,16 +435,15 @@ def calculate_drift(
             all_tracks[name] = positions
             all_timestamps[name] = timestamps
 
-        if wind_divergence and "pos_div" in all_tracks and "neg_div" in all_tracks:
+        if wind_divergence and 'pos_div' in all_tracks and 'neg_div' in all_tracks:
             _last_divergence_tracks = {
-                "pos_div": all_tracks["pos_div"],
-                "neg_div": all_tracks["neg_div"],
+                'pos_div': all_tracks['pos_div'],
+                'neg_div': all_tracks['neg_div'],
             }
         else:
             _last_divergence_tracks = None
 
-        return all_tracks["normal"], all_timestamps["normal"]
-
+        return all_tracks['normal'], all_timestamps['normal']
     finally:
         cur.close()
         conn.close()

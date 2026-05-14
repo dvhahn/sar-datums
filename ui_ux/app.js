@@ -240,30 +240,12 @@ const inpStart     = document.getElementById('inpStart');
 const inpEnd       = document.getElementById('inpEnd');
 const fab          = document.getElementById('fab');
 
-// Pattern dialog references
-const patternCardWrap = document.getElementById('patternCardWrap');
-const btnPatternYes = document.getElementById('btnPatternYes');
-const btnPatternNo = document.getElementById('btnPatternNo');
-const inpRadius = document.getElementById('inpRadius');
-
-// Accuracy dialog references
-const accuracyToggle = document.getElementById('accuracyToggle');
-const accuracyCardWrap = document.getElementById('accuracyCardWrap');
-const inpAccObject = document.getElementById('inpAccObject');
-const inpAccStart = document.getElementById('inpAccStart');
-const inpAccEnd = document.getElementById('inpAccEnd');
-const btnTestAccuracy = document.getElementById('btnTestAccuracy');
-const accuracyResults = document.getElementById('accuracyResults');
-const accuracyFormError = document.getElementById('accuracyFormError');
-
 
 // ── Default time
 const now   = new Date();
 const later = new Date(now.getTime() + 3 * 60 * 60 * 1000);
 inpStart.value = toLocalDatetime(now);
 inpEnd.value   = toLocalDatetime(later);
-inpAccStart.value = toLocalDatetime(now);
-inpAccEnd.value   = toLocalDatetime(later);
 
 function toLocalDatetime(d) {
   const pad = n => String(n).padStart(2, '0');
@@ -391,16 +373,33 @@ function closeCard() {
 cardClose.addEventListener('click', closeCard);
 cardBackdrop.addEventListener('click', closeCard);
 
-// ── Pattern dialog
-function openPatternDialog() {
-  patternCardWrap.classList.remove('hidden');
-}
-
-function closePatternDialog() {
-  patternCardWrap.classList.add('hidden');
-}
 
 // ── Accuracy dialog
+const accuracyToggle   = document.getElementById('accuracyToggle');
+const accuracyCardWrap = document.getElementById('accuracyCardWrap');
+const inpAccObject     = document.getElementById('inpAccObject');
+const inpAccStart      = document.getElementById('inpAccStart');
+const inpAccEnd        = document.getElementById('inpAccEnd');
+const btnTestAccuracy  = document.getElementById('btnTestAccuracy');
+const accuracyResults  = document.getElementById('accuracyResults');
+const accuracyFormError = document.getElementById('accuracyFormError');
+
+inpAccStart.value = toLocalDatetime(now);
+inpAccEnd.value   = toLocalDatetime(later);
+
+async function loadAccuracyObjects() {
+  try {
+    const res = await fetch('/api/objects');
+    const list = await res.json();
+    inpAccObject.innerHTML = list
+      .map(o => `<option value="${o.id}">${o.name}</option>`)
+      .join('');
+  } catch {
+    inpAccObject.innerHTML = '<option>Failed to load</option>';
+  }
+}
+loadAccuracyObjects();
+
 function openAccuracyCard() {
   accuracyCardWrap.classList.remove('hidden');
   fab.classList.add('hidden');
@@ -413,9 +412,65 @@ function closeAccuracyCard() {
   fab.classList.remove('hidden');
 }
 
+function showAccuracyError(msg) {
+  accuracyFormError.textContent = msg;
+  accuracyFormError.classList.remove('hidden');
+}
+
+function clearAccuracyError() {
+  accuracyFormError.classList.add('hidden');
+}
+
 accuracyToggle.addEventListener('click', openAccuracyCard);
 accuracyCardWrap.querySelector('.card-close').addEventListener('click', closeAccuracyCard);
 accuracyCardWrap.querySelector('.card-backdrop').addEventListener('click', closeAccuracyCard);
+
+btnTestAccuracy.addEventListener('click', async () => {
+  clearAccuracyError();
+  btnTestAccuracy.disabled = true;
+  btnTestAccuracy.textContent = 'Testing…';
+
+  try {
+    const isReverse = document.getElementById('inpAccReverse').checked;
+    const earlier = inpAccStart.value + ':00';
+    const later   = inpAccEnd.value + ':00';
+    const startTime = isReverse ? later : earlier;
+    const endTime   = isReverse ? earlier : later;
+
+    const fileInput = document.getElementById('inpGpxFile');
+    if (!fileInput.files || !fileInput.files[0]) {
+      throw new Error('Please select a GPX file');
+    }
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('lat',            document.getElementById('inpAccLat').value);
+    formData.append('lon',            document.getElementById('inpAccLon').value);
+    formData.append('start_time',     startTime);
+    formData.append('end_time',       endTime);
+    formData.append('wind_speed',     document.getElementById('inpAccWindSpeed').value);
+    formData.append('wind_direction', document.getElementById('inpAccWindDir').value);
+    formData.append('object_id',      inpAccObject.value);
+
+    const res = await fetch('/api/accuracy', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+
+    document.getElementById('resultAccuracy').textContent    = `${data.accuracy_pct}%`;
+    document.getElementById('resultFinalError').textContent  = `${data.final_error_nm} nm`;
+    document.getElementById('resultMeanError').textContent   = `${data.mean_error_m} m`;
+    document.getElementById('resultMaxError').textContent    = `${data.max_error_m} m`;
+    document.getElementById('resultPairedPoints').textContent = data.paired_points;
+    document.getElementById('resultTrackLength').textContent = `${data.ref_track_length_m} m`;
+
+    accuracyResults.classList.remove('hidden');
+  } catch (err) {
+    showAccuracyError(err.message);
+  } finally {
+    btnTestAccuracy.disabled = false;
+    btnTestAccuracy.textContent = 'Test Accuracy';
+  }
+});
 
 
 // ── FAB: click = open card, drag = pin drop; drag back to corner = cancel
@@ -530,9 +585,11 @@ const inpRadius         = document.getElementById('inpRadius');
 const radiusSection     = document.getElementById('radiusSection');
 const formError         = document.getElementById('formError');
 const chkDivergence     = document.getElementById('chkDivergence');
-const inpReverse   = document.getElementById('inpReverse');
-const formError    = document.getElementById('formError');
-const btnGetWind   = document.getElementById('btnGetWind');
+const btnGetWind        = document.getElementById('btnGetWind');
+
+inpMultipleTracks.addEventListener('change', () => {
+  radiusSection.classList.toggle('hidden', !inpMultipleTracks.checked);
+});
 
 // ── Get Wind from Open-Meteo
 btnGetWind.addEventListener('click', async () => {
@@ -688,15 +745,6 @@ function clearError() {
   formError.classList.add('hidden');
 }
 
-function showAccuracyError(msg) {
-  accuracyFormError.textContent = msg;
-  accuracyFormError.classList.remove('hidden');
-}
-
-function clearAccuracyError() {
-  accuracyFormError.classList.add('hidden');
-}
-
 document.querySelectorAll('.card-form input, .card-form select')
   .forEach(el => el.addEventListener('input', clearError));
 
@@ -725,82 +773,62 @@ btnCalculate.addEventListener('click', async () => {
     return;   // request never goes out, console stays clean
   }
 
-  // Store form data for later use
-  const formData = {
-    lat: parseFloat(inpLat.value),
-    lon: parseFloat(inpLon.value),
-    startTime: inpReverse.checked ? (inpEnd.value + ':00') : (inpStart.value + ':00'),
-    endTime: inpReverse.checked ? (inpStart.value + ':00') : (inpEnd.value + ':00'),
-    windSpeed: parseFloat(inpWindSpeed.value),
-    windDirection: parseFloat(inpWindDir.value),
-    objectId: parseInt(objectSelect.value, 10),
-    isReverse: inpReverse.checked,
-  };
-
-  // Close main card and open pattern dialog
-  closeCard();
-  openPatternDialog();
-
-  // Handle pattern dialog responses
-  btnPatternYes.onclick = async () => {
-    closePatternDialog();
-    await executeDriftCalculation(formData, true);
-  };
-
-  btnPatternNo.onclick = async () => {
-    closePatternDialog();
-    await executeDriftCalculation(formData, false);
-  };
-});
-
-async function executeDriftCalculation(formData, withPatterns) {
-  const btnCalculate = document.getElementById('btnCalculate');
   btnCalculate.disabled = true;
   btnCalculate.textContent = 'Calculating…';
 
-try {
-  const res = await fetch('/api/drift', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      lat: formData.lat,
-      lon: formData.lon,
-      start_time: formData.startTime,
-      end_time: formData.endTime,
-      wind_speed: formData.windSpeed,
-      wind_direction: formData.windDirection,
-      object_id: formData.objectId,
-      is_reverse: formData.isReverse,
-      multiple_tracks: withPatterns,
-      radius_nm: parseFloat(inpRadius.value),
-      wind_divergence: chkDivergence.checked,
-      divergence_angle: 30,
-    }),
-  });
+  try {
+    // Backend expects start_time > end_time when reverse is on.
+    // Keep the form natural (earlier → later) and swap here.
+    const isReverse = inpReverse.checked;
+    const earlier = inpStart.value + ':00';
+    const later   = inpEnd.value + ':00';
+    const startTime = isReverse ? later   : earlier;
+    const endTime   = isReverse ? earlier : later;
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+    const res = await fetch('/api/drift', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lat:              parseFloat(inpLat.value),
+        lon:              parseFloat(inpLon.value),
+        start_time:       startTime,
+        end_time:         endTime,
+        wind_speed:       parseFloat(inpWindSpeed.value),
+        wind_direction:   parseFloat(inpWindDir.value),
+        object_id:        parseInt(selectedObjectIdInput.value, 10),
+        is_reverse:       isReverse,
+        multiple_tracks:  inpMultipleTracks.checked,
+        radius_nm:        parseFloat(inpRadius.value),
+        wind_divergence:   chkDivergence.checked,
+        divergence_angle: 30,
+      }),
+    });
 
-  // Grab the per-run GPX/KML right away so later calcs don't overwrite them.
-  const [gpxText, kmlText] = await Promise.all([
-    fetch('/api/gpx').then(r => r.text()),
-    fetch('/api/kml').then(r => r.text()),
-  ]);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
 
-  addRun(data, {
-    isReverse: formData.isReverse,
-    startLat: formData.lat,
-    startLon: formData.lon,
-    gpxUrl: makeBlobUrl(gpxText, 'application/gpx+xml'),
-    kmlUrl: makeBlobUrl(kmlText, 'application/vnd.google-earth.kml+xml'),
-  });
-} catch (err) {
-  showError(err.message);
-  openCard();
-} finally {
-  btnCalculate.disabled = false;
-  btnCalculate.textContent = 'Calculate Datum';
-}
+    // Grab the per-run GPX/KML right away so later calcs don't overwrite them.
+    const [gpxText, kmlText] = await Promise.all([
+      fetch('/api/gpx').then(r => r.text()),
+      fetch('/api/kml').then(r => r.text()),
+    ]);
+
+    addRun(data, {
+      isReverse: inpReverse.checked,
+      startLat: parseFloat(inpLat.value),
+      startLon: parseFloat(inpLon.value),
+      gpxUrl: makeBlobUrl(gpxText, 'application/gpx+xml'),
+      kmlUrl: makeBlobUrl(kmlText, 'application/vnd.google-earth.kml+xml'),
+    });
+
+    closeCard();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    btnCalculate.disabled = false;
+    btnCalculate.textContent = 'Calculate Datum';
+  }
+});
 
 
 function makeBlobUrl(text, type) {
@@ -1318,62 +1346,3 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (res.ok) fullTree = await res.json();
   } catch (e) { console.error('Preload hierarchy failed', e); }
 });
-// ── Testing Accuracy functionality
-btnTestAccuracy.addEventListener('click', async () => {
-  clearAccuracyError();
-  btnTestAccuracy.disabled = true;
-  btnTestAccuracy.textContent = 'Testing…';
-
-  try {
-    // Get form data
-    const isReverse = document.getElementById('inpAccReverse').checked;
-    const earlier = inpAccStart.value + ':00';
-    const later = inpAccEnd.value + ':00';
-    const startTime = isReverse ? later : earlier;
-    const endTime = isReverse ? earlier : later;
-
-    // Get GPX file
-    const fileInput = document.getElementById('inpGpxFile');
-    if (!fileInput.files || !fileInput.files[0]) {
-      throw new Error('Please select a GPX file');
-    }
-
-    const gpxFile = fileInput.files[0];
-    const referenceGpx = await gpxFile.text();
-
-    // Call accuracy API
-    const res = await fetch('/api/accuracy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        lat: parseFloat(document.getElementById('inpAccLat').value),
-        lon: parseFloat(document.getElementById('inpAccLon').value),
-        start_time: startTime,
-        end_time: endTime,
-        wind_speed: parseFloat(document.getElementById('inpAccWindSpeed').value),
-        wind_direction: parseFloat(document.getElementById('inpAccWindDir').value),
-        object_id: parseInt(inpAccObject.value, 10),
-        is_reverse: isReverse,
-        reference_gpx: referenceGpx,
-      }),
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
-
-    // Display results
-    document.getElementById('resultAccuracy').textContent = `${data.accuracy_pct}%`;
-    document.getElementById('resultFinalError').textContent = `${data.final_error_nm} nm`;
-    document.getElementById('resultMeanError').textContent = `${data.mean_error_m} m`;
-    document.getElementById('resultMaxError').textContent = `${data.max_error_m} m`;
-    document.getElementById('resultPairedPoints').textContent = data.paired_points;
-    document.getElementById('resultTrackLength').textContent = `${data.ref_track_length_m} m`;
-
-    accuracyResults.classList.remove('hidden');
-  } catch (err) {
-    showAccuracyError(err.message);
-  } finally {
-    btnTestAccuracy.disabled = false;
-    btnTestAccuracy.textContent = 'Test Accuracy';
-  }
-});}
