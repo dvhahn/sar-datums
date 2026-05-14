@@ -50,38 +50,46 @@ map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-rig
 map.addControl(new maplibregl.ScaleControl({ unit: 'nautical', maxWidth: 120 }), 'top-right');
 
 
-// ── Currents arrow image: bezier S-curve tail + filled head, white-on-alpha
-// for SDF so icon-color can tint it per-feature by speed.
+// ── Currents comet image: round leading head + tapered trailing tail.
+// Direction is unambiguous (head points the way the water is flowing) and
+// the silhouette reads as a wave-crest splash rather than an arrow. SDF
+// alpha so icon-color tints per-feature by speed.
 function makeArrowImage() {
-  const size = 28;
+  const w = 14;
+  const h = 40;
   const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = w;
+  canvas.height = h;
   const ctx = canvas.getContext('2d');
-  ctx.strokeStyle = '#fff';
   ctx.fillStyle = '#fff';
-  ctx.lineWidth = 2.4;
-  ctx.lineCap = 'round';
 
-  // Wavy tail — gentle S-curve gives a flowing-water feel rather than a rigid arrow.
+  const cx = w / 2;
+  const headY = 5;
+  const headR = 3.6;
+  const tailEnd = h - 3;
+
+  // Tapered tail — bulges out near the head and pinches off at the back.
   ctx.beginPath();
-  ctx.moveTo(size / 2, size - 4);
+  ctx.moveTo(cx - headR, headY);
   ctx.bezierCurveTo(
-    size / 2 - 4, size * 0.62,
-    size / 2 + 4, size * 0.38,
-    size / 2, 9,
+    cx - headR * 0.5, h * 0.45,
+    cx - 0.4,         h * 0.85,
+    cx,               tailEnd,
   );
-  ctx.stroke();
-
-  // Arrowhead
-  ctx.beginPath();
-  ctx.moveTo(size / 2, 2);
-  ctx.lineTo(size / 2 - 5.5, 10);
-  ctx.lineTo(size / 2 + 5.5, 10);
+  ctx.bezierCurveTo(
+    cx + 0.4,         h * 0.85,
+    cx + headR * 0.5, h * 0.45,
+    cx + headR,       headY,
+  );
   ctx.closePath();
   ctx.fill();
 
-  return ctx.getImageData(0, 0, size, size);
+  // Round head — the directional cue.
+  ctx.beginPath();
+  ctx.arc(cx, headY, headR, 0, Math.PI * 2);
+  ctx.fill();
+
+  return ctx.getImageData(0, 0, w, h);
 }
 
 function ensureArrowImage() {
@@ -214,19 +222,21 @@ function renderCurrents(arrows) {
       'icon-rotation-alignment': 'map',
       'icon-allow-overlap': true,
       'icon-size': ['interpolate', ['linear'], ['get', 'speed'],
-        0, 0.45,
-        0.5, 0.65,
-        1.5, 1.0,
-        3, 1.4,
+        0,   0.55,
+        0.5, 0.85,
+        1.5, 1.2,
+        3,   1.65,
       ],
     },
     paint: {
-      // Speed-encoded gradient: pale cyan → blue → purple → red as currents speed up.
+      // Wave-tone palette — slow currents are a saturated cyan (visible
+      // against the teal Ocean basemap), fast currents are pure foam-white
+      // (the wave-crash moment). Speed reads as "ripple → spray → crash".
       'icon-color': ['interpolate', ['linear'], ['get', 'speed'],
-        0,   '#7dd3fc',
-        0.5, '#0a84ff',
-        1.5, '#bf5af2',
-        3,   '#ff453a',
+        0,   '#4dd0e1',   // saturated cyan — visible even when slow
+        0.5, '#80deea',   // brighter cyan
+        1.5, '#e0f7fa',   // near-white spray
+        3,   '#ffffff',   // pure foam-white — wave crashing
       ],
       // Per-feature alpha — combines flow lifecycle with global breathing pulse.
       'icon-opacity': ['get', 'fade'],
@@ -261,13 +271,17 @@ function startCurrentsAnimation() {
       animLastTick = now;
       animT += 0.033;
 
-      const flowPhase = (animT * 0.75) % 1;           // ~1.3 s drift cycle
-      const pulse     = 0.78 + 0.14 * Math.sin(animT * 1.6);  // ~4 s breathing
-      const driftMetres = flowPhase * 70;
+      // ~1.7 s drift cycle with narrow fades (15% in / 15% out) so wisps
+      // spend most of their life fully visible. Smoothstep on the fade
+      // ramps gives a graceful appear/disappear rather than a hard ramp.
+      const flowPhase = (animT * 0.6) % 1;                   // ~1.7 s drift cycle
+      const pulse     = 0.85 + 0.10 * Math.sin(animT * 1.0); // gentle breathing
+      const driftMetres = flowPhase * 100;
 
+      const smoothstep = (t) => t * t * (3 - 2 * t);
       let lifecycle;
-      if (flowPhase < 0.15)       lifecycle = flowPhase / 0.15;
-      else if (flowPhase > 0.85)  lifecycle = (1 - flowPhase) / 0.15;
+      if (flowPhase < 0.15)       lifecycle = smoothstep(flowPhase / 0.15);
+      else if (flowPhase > 0.85)  lifecycle = smoothstep((1 - flowPhase) / 0.15);
       else                        lifecycle = 1;
 
       const features = baseArrows.map(a => {
