@@ -655,9 +655,20 @@ btnGetWind.addEventListener('click', async () => {
 });
 
 const RUN_COLORS = ['#0a84ff', '#ff9f0a', '#bf5af2', '#30d158', '#ff453a', '#64d2ff', '#ffd60a', '#ff375f'];
+// Hue-family pairs for time-uncertainty runs: [earliest (saturated), latest (lighter)].
+// Same-hue pairing makes the two tracks read as bounds of one uncertainty zone
+// instead of unrelated runs; cycling the hue family separates multiple pairs.
+const UNCERTAINTY_PALETTE = [
+  ['#0a84ff', '#64d2ff'],  // blue family
+  ['#bf5af2', '#da8fff'],  // purple family
+  ['#30d158', '#7be88e'],  // green family
+  ['#ff9500', '#ffc66e'],  // orange family
+  ['#ff375f', '#ff8a99'],  // pink family
+];
 const SAT_DIRECTIONS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 let runs = [];
 let runCounter = 0;
+let uncertaintyPairCount = 0;
 
 // ── Hover popup: show nearest point's coords on a drift line
 const trackCoord = document.getElementById('trackCoord');
@@ -946,9 +957,10 @@ function addRun(data, meta) {
 // joined by a translucent shade polygon between their trajectories.
 function addUncertaintyPair(earliestResult, latestResult, meta) {
   runCounter++;
+  uncertaintyPairCount++;
   const pairId = runCounter;
-  const earliestColor = RUN_COLORS[(pairId * 2 - 2) % RUN_COLORS.length];
-  const latestColor   = RUN_COLORS[(pairId * 2 - 1) % RUN_COLORS.length];
+  const [earliestColor, latestColor] =
+    UNCERTAINTY_PALETTE[(uncertaintyPairCount - 1) % UNCERTAINTY_PALETTE.length];
 
   const makeChild = (result, color) => ({
     id: `${pairId}-${result.role}`,
