@@ -358,6 +358,39 @@ btnChangeObject.addEventListener('click', () => {
   if (fullTree.length) renderCurrentLevel();
 });
 
+// Helper to send a drift request and return data
+async function fetchDrift(startTime, endTime) {
+  const res = await fetch('/api/drift', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lat: parseFloat(inpLat.value),
+      lon: parseFloat(inpLon.value),
+      start_time: startTime,
+      end_time: endTime,
+      wind_speed: parseFloat(inpWindSpeed.value),
+      wind_direction: parseFloat(inpWindDir.value),
+      object_id: parseInt(selectedObjectIdInput.value, 10),
+      is_reverse: inpReverse.checked,
+      multiple_tracks: inpMultipleTracks.checked,
+      radius_nm: parseFloat(inpRadius.value),
+      wind_divergence: chkDivergence.checked,
+      divergence_angle: 30,
+    }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
+  return res.json();
+}
+
+const datetimeInputs = ['inpStart', 'inpEnd', 'inpEarliestLKP', 'inpLatestLKP'];
+datetimeInputs.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') e.preventDefault();
+    });
+  }
+});
 
 // ── Card open / close
 function openCard() {
@@ -622,9 +655,20 @@ btnGetWind.addEventListener('click', async () => {
 });
 
 const RUN_COLORS = ['#0a84ff', '#ff9f0a', '#bf5af2', '#30d158', '#ff453a', '#64d2ff', '#ffd60a', '#ff375f'];
+// Hue-family pairs for time-uncertainty runs: [earliest (saturated), latest (lighter)].
+// Same-hue pairing makes the two tracks read as bounds of one uncertainty zone
+// instead of unrelated runs; cycling the hue family separates multiple pairs.
+const UNCERTAINTY_PALETTE = [
+  ['#0a84ff', '#64d2ff'],  // blue family
+  ['#bf5af2', '#da8fff'],  // purple family
+  ['#30d158', '#7be88e'],  // green family
+  ['#ff9500', '#ffc66e'],  // orange family
+  ['#ff375f', '#ff8a99'],  // pink family
+];
 const SAT_DIRECTIONS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 let runs = [];
 let runCounter = 0;
+let uncertaintyPairCount = 0;
 
 // ── Hover popup: show nearest point's coords on a drift line
 const trackCoord = document.getElementById('trackCoord');
@@ -777,50 +821,63 @@ btnCalculate.addEventListener('click', async () => {
   btnCalculate.textContent = 'Calculating…';
 
   try {
-    // Backend expects start_time > end_time when reverse is on.
-    // Keep the form natural (earlier → later) and swap here.
     const isReverse = inpReverse.checked;
-    const earlier = inpStart.value + ':00';
-    const later   = inpEnd.value + ':00';
-    const startTime = isReverse ? later   : earlier;
-    const endTime   = isReverse ? earlier : later;
+    const meta = {
+        isReverse: isReverse,
+        startLat: parseFloat(inpLat.value),
+        startLon: parseFloat(inpLon.value),
+    };
 
-    const res = await fetch('/api/drift', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        lat:              parseFloat(inpLat.value),
-        lon:              parseFloat(inpLon.value),
-        start_time:       startTime,
-        end_time:         endTime,
-        wind_speed:       parseFloat(inpWindSpeed.value),
-        wind_direction:   parseFloat(inpWindDir.value),
-        object_id:        parseInt(selectedObjectIdInput.value, 10),
-        is_reverse:       isReverse,
-        multiple_tracks:  inpMultipleTracks.checked,
-        radius_nm:        parseFloat(inpRadius.value),
-        wind_divergence:   chkDivergence.checked,
-        divergence_angle: 30,
-      }),
-    });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
+    if (chkTimeUncertain.checked) {
+      const earliestLKP = document.getElementById('inpEarliestLKP').value;
+      const latestLKP   = document.getElementById('inpLatestLKP').value;
+      const arrival     = inpEnd.value;
+      if (!earliestLKP || !latestLKP || !arrival) throw new Error('Please fill in all time fields');
 
-    // Grab the per-run GPX/KML right away so later calcs don't overwrite them.
-    const [gpxText, kmlText] = await Promise.all([
-      fetch('/api/gpx').then(r => r.text()),
-      fetch('/api/kml').then(r => r.text()),
-    ]);
+      // Sequential — backend stores last GPX/KML in app.config (single slot),
+      // so parallel runs race and both clients would read the second one.
+      const labels = [
+        { value: earliestLKP, role: 'earliest' },
+        { value: latestLKP,   role: 'latest'   },
+      ];
+      const results = [];
+      for (const { value, role } of labels) {
+        let startTime = value + ':00';
+        let endTime   = arrival + ':00';
+        if (isReverse) {
+          [startTime, endTime] = [endTime, startTime];
+        }
+        const data = await fetchDrift(startTime, endTime);
+        const [gpxText, kmlText] = await Promise.all([
+          fetch('/api/gpx').then(r => r.text()),
+          fetch('/api/kml').then(r => r.text()),
+        ]);
+        results.push({ role, data, gpxText, kmlText, time: value });
+      }
 
-    addRun(data, {
-      isReverse: inpReverse.checked,
-      startLat: parseFloat(inpLat.value),
-      startLon: parseFloat(inpLon.value),
-      gpxUrl: makeBlobUrl(gpxText, 'application/gpx+xml'),
-      kmlUrl: makeBlobUrl(kmlText, 'application/vnd.google-earth.kml+xml'),
-    });
+      // One GPX/KML with both tracks named so chart plotters distinguish them.
+      const combinedGpx = combineGpxTexts(results[0].gpxText, results[1].gpxText);
+      const combinedKml = combineKmlTexts(results[0].kmlText, results[1].kmlText);
+      const gpxUrl = makeBlobUrl(combinedGpx, 'application/gpx+xml');
+      const kmlUrl = makeBlobUrl(combinedKml, 'application/vnd.google-earth.kml+xml');
 
+      addUncertaintyPair(results[0], results[1], { ...meta, gpxUrl, kmlUrl });
+    } else {
+      // Normal single-run mode
+        const earlier = inpStart.value + ':00';
+        const later = inpEnd.value + ':00';
+        const startTime = isReverse ? later : earlier;
+        const endTime = isReverse ? earlier : later;
+        const data = await fetchDrift(startTime, endTime);
+        const [gpxText, kmlText] = await Promise.all([
+            fetch('/api/gpx').then(r => r.text()),
+            fetch('/api/kml').then(r => r.text()),
+        ]);
+        const gpxUrl = makeBlobUrl(gpxText, 'application/gpx+xml');
+        const kmlUrl = makeBlobUrl(kmlText, 'application/vnd.google-earth.kml+xml');
+        addRun(data, { ...meta, gpxUrl, kmlUrl });
+    }
     closeCard();
   } catch (err) {
     showError(err.message);
@@ -833,6 +890,46 @@ btnCalculate.addEventListener('click', async () => {
 
 function makeBlobUrl(text, type) {
   return URL.createObjectURL(new Blob([text], { type }));
+}
+
+// Pull <trk>…</trk> blocks from each GPX, rename them for clarity, and wrap
+// the lot in a single <gpx> envelope so chart plotters see one file with two
+// distinct routes (matches Peter's VBA "(first)"/"(second)" output).
+function combineGpxTexts(earliestText, latestText) {
+  const trkRegex = /<trk>[\s\S]*?<\/trk>/g;
+  const labelTrk = (block, suffix) =>
+    block.replace(/<name>([^<]*)<\/name>/, `<name>$1 (${suffix})</name>`);
+  const earliestTrks = (earliestText.match(trkRegex) || []).map(t => labelTrk(t, 'earliest'));
+  const latestTrks   = (latestText.match(trkRegex)   || []).map(t => labelTrk(t, 'latest'));
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<gpx version="1.1" creator="Drift Simulator" xmlns="http://www.topografix.com/GPX/1/1">',
+    ...earliestTrks,
+    ...latestTrks,
+    '</gpx>',
+  ].join('\n');
+}
+
+function combineKmlTexts(earliestText, latestText) {
+  const styleRegex     = /<Style[\s\S]*?<\/Style>/g;
+  const placemarkRegex = /<Placemark>[\s\S]*?<\/Placemark>/g;
+  const labelPm = (block, suffix) =>
+    block.replace(/<name>([^<]*)<\/name>/, `<name>$1 (${suffix})</name>`);
+  const styles       = earliestText.match(styleRegex) || [];
+  const earliestPms  = (earliestText.match(placemarkRegex) || []).map(p => labelPm(p, 'earliest'));
+  const latestPms    = (latestText.match(placemarkRegex)   || []).map(p => labelPm(p, 'latest'));
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">',
+    '  <Document>',
+    '    <name>SAR Drift Prediction (Time Uncertain)</name>',
+    '    <description>Earliest and latest LKP drift tracks</description>',
+    ...styles,
+    ...earliestPms,
+    ...latestPms,
+    '  </Document>',
+    '</kml>',
+  ].join('\n');
 }
 
 
@@ -855,23 +952,131 @@ function addRun(data, meta) {
   fitToRun(run);
 }
 
+// Earliest + Latest LKP collapsed into one pair. Two child runs share a parent
+// id, render as a single pill, get one combined GPX/KML download, and are
+// joined by a translucent shade polygon between their trajectories.
+function addUncertaintyPair(earliestResult, latestResult, meta) {
+  runCounter++;
+  uncertaintyPairCount++;
+  const pairId = runCounter;
+  const [earliestColor, latestColor] =
+    UNCERTAINTY_PALETTE[(uncertaintyPairCount - 1) % UNCERTAINTY_PALETTE.length];
+
+  const makeChild = (result, color) => ({
+    id: `${pairId}-${result.role}`,
+    color,
+    positions: result.data.positions,
+    satellites: result.data.satellites || [],
+    posDivPositions: result.data.pos_div_positions || null,
+    negDivPositions: result.data.neg_div_positions || null,
+    summary: result.data.summary,
+    role: result.role,
+    parentId: pairId,
+    isReverse: meta.isReverse,
+    startLat: meta.startLat,
+    startLon: meta.startLon,
+  });
+
+  const earliest = makeChild(earliestResult, earliestColor);
+  const latest   = makeChild(latestResult,   latestColor);
+
+  // Shade first so the line layers paint over it.
+  drawUncertaintyShade(pairId, earliest.positions, latest.positions, earliestColor);
+  drawRun(earliest);
+  drawRun(latest);
+
+  const pair = {
+    id: pairId,
+    isUncertaintyPair: true,
+    earliest,
+    latest,
+    earliestTime: earliestResult.time,
+    latestTime: latestResult.time,
+    gpxUrl: meta.gpxUrl,
+    kmlUrl: meta.kmlUrl,
+    startLat: meta.startLat,
+    startLon: meta.startLon,
+    shadeLayerId: `shade-${pairId}`,
+  };
+  runs.push(pair);
+  renderPills();
+  fitToRun(pair);
+}
+
+// Translucent fill bounded by earliest path forward + latest path reversed.
+// Tracks can self-intersect (eddies, opposing tides) — MapLibre still renders
+// it usefully, just with an even-odd ring fill near the crossing.
+function drawUncertaintyShade(pairId, earliestPositions, latestPositions, color) {
+  if (!earliestPositions?.length || !latestPositions?.length) return;
+  const ring = [
+    ...earliestPositions.map(p => [p.lon, p.lat]),
+    ...latestPositions.slice().reverse().map(p => [p.lon, p.lat]),
+  ];
+  // Close the ring explicitly to keep MapLibre happy.
+  ring.push(ring[0]);
+
+  const sourceId = `shade-${pairId}`;
+  map.addSource(sourceId, {
+    type: 'geojson',
+    data: {
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [ring] },
+    },
+  });
+  map.addLayer({
+    id: sourceId,
+    type: 'fill',
+    source: sourceId,
+    paint: {
+      'fill-color': color,
+      'fill-opacity': 0.12,
+      'fill-antialias': true,
+    },
+  });
+}
+
 function removeRun(id) {
   const run = runs.find(r => r.id === id);
   if (!run) return;
 
-  const layerId = `run-${id}`;
+  if (run.isUncertaintyPair) {
+    removeChildLayers(run.earliest);
+    removeChildLayers(run.latest);
+    if (map.getLayer(run.shadeLayerId))  map.removeLayer(run.shadeLayerId);
+    if (map.getSource(run.shadeLayerId)) map.removeSource(run.shadeLayerId);
+    // Pattern (if any) is attached to the earliest child since the pill
+    // pattern button opens the dialog targeting pair.earliest.
+    removePatternForRun(run.earliest);
+    URL.revokeObjectURL(run.gpxUrl);
+    URL.revokeObjectURL(run.kmlUrl);
+  } else {
+    removeChildLayers(run);
+    removePatternForRun(run);
+    URL.revokeObjectURL(run.gpxUrl);
+    URL.revokeObjectURL(run.kmlUrl);
+  }
+
+  runs = runs.filter(r => r.id !== id);
+  renderPills();
+
+  if (runs.length === 0) openCard();
+}
+
+// Tear down everything drawRun added for a single run object. Used directly
+// for normal runs and twice (per child) for an uncertainty pair.
+function removeChildLayers(run) {
+  const layerId = `run-${run.id}`;
   if (map.getLayer(layerId))  map.removeLayer(layerId);
   if (map.getSource(layerId)) map.removeSource(layerId);
   run.radiusLayers?.forEach(rid => {
     if (map.getLayer(rid)) map.removeLayer(rid);
   });
-  const radiusSourceId = `run-${id}-radius`;
+  const radiusSourceId = `run-${run.id}-radius`;
   if (map.getSource(radiusSourceId)) map.removeSource(radiusSourceId);
   run.satelliteLayers?.forEach(satId => {
     if (map.getLayer(satId))  map.removeLayer(satId);
     if (map.getSource(satId)) map.removeSource(satId);
   });
-  removePatternForRun(run);
   if (run.posDivLayerId) {
     if (map.getLayer(run.posDivLayerId)) map.removeLayer(run.posDivLayerId);
     if (map.getSource(run.posDivLayerId)) map.removeSource(run.posDivLayerId);
@@ -881,13 +1086,6 @@ function removeRun(id) {
     if (map.getSource(run.negDivLayerId)) map.removeSource(run.negDivLayerId);
   }
   run.markers?.forEach(m => m.remove());
-  URL.revokeObjectURL(run.gpxUrl);
-  URL.revokeObjectURL(run.kmlUrl);
-
-  runs = runs.filter(r => r.id !== id);
-  renderPills();
-
-  if (runs.length === 0) openCard();
 }
 
 // 64-point ring around (centerLon, centerLat) at radiusNm. Returned as a
@@ -962,7 +1160,7 @@ function drawRun(run) {
       type: 'line',
       source: posLayerId,
       paint: {
-        'line-color': '#ff9f0a',   // orange
+        'line-color': '#a0a0a0',   // gray
         'line-width': 2.5,
         'line-dasharray': [6, 4],
         'line-opacity': 0.7,
@@ -988,7 +1186,7 @@ function drawRun(run) {
       type: 'line',
       source: negLayerId,
       paint: {
-        'line-color': '#ff453a',   // red
+        'line-color': '#606060',   // darker gray
         'line-width': 2.5,
         'line-dasharray': [6, 4],
         'line-opacity': 0.7,
@@ -1074,19 +1272,35 @@ function animateLineDraw(layerId, fullCoords, durationMs) {
 
 function redrawAllRuns() {
   runs.forEach(run => {
-    run.markers?.forEach(m => m.remove());
-    drawRun(run);
+    if (run.isUncertaintyPair) {
+      run.earliest.markers?.forEach(m => m.remove());
+      run.latest.markers?.forEach(m => m.remove());
+      drawUncertaintyShade(run.id, run.earliest.positions, run.latest.positions, run.earliest.color);
+      drawRun(run.earliest);
+      drawRun(run.latest);
+    } else {
+      run.markers?.forEach(m => m.remove());
+      drawRun(run);
+    }
   });
 }
 
 function fitToRun(run) {
-  const coords = run.positions.map(p => [p.lon, p.lat]);
+  const positionsList = run.isUncertaintyPair
+    ? [...run.earliest.positions, ...run.latest.positions]
+    : run.positions;
+  const coords = positionsList.map(p => [p.lon, p.lat]);
   const bounds = coords.reduce(
     (b, c) => b.extend(c),
     new maplibregl.LngLatBounds(coords[0], coords[0])
   );
   bounds.extend([run.startLon, run.startLat]);
-  (run.satellites || []).forEach(sat => sat.forEach(p => bounds.extend([p.lon, p.lat])));
+  if (run.isUncertaintyPair) {
+    (run.earliest.satellites || []).forEach(sat => sat.forEach(p => bounds.extend([p.lon, p.lat])));
+    (run.latest.satellites   || []).forEach(sat => sat.forEach(p => bounds.extend([p.lon, p.lat])));
+  } else {
+    (run.satellites || []).forEach(sat => sat.forEach(p => bounds.extend([p.lon, p.lat])));
+  }
   // Search radius is intentionally excluded — at SAR scale it can dwarf the
   // actual drift, so we let the trajectory frame the view and let the radius
   // ring spill off-screen.
@@ -1103,6 +1317,8 @@ function renderPills() {
 }
 
 function buildPill(run) {
+  if (run.isUncertaintyPair) return buildUncertaintyPill(run);
+
   const last = run.positions[run.positions.length - 1];
   const s = run.summary;
 
@@ -1136,6 +1352,64 @@ function buildPill(run) {
   pill.querySelector('.pattern').addEventListener('click', (e) => {
     e.stopPropagation();
     openPatternCard(run);
+  });
+
+  return pill;
+}
+
+// Stacked dual-row pill: header tag + two coord rows (earliest, latest) +
+// one set of action buttons. Pattern button targets the earliest child since
+// that's the "longer drift" end-point a search manager would centre on.
+function buildUncertaintyPill(pair) {
+  const eLast = pair.earliest.positions[pair.earliest.positions.length - 1];
+  const lLast = pair.latest.positions[pair.latest.positions.length - 1];
+  const eS = pair.earliest.summary;
+  const lS = pair.latest.summary;
+  const row = (color, last, summary, role) => `
+    <div class="pill-uncertain-row">
+      <div class="pill-dot" style="background:${color}"></div>
+      <div class="pill-coord">${last.lat.toFixed(5)}°, ${last.lon.toFixed(5)}°</div>
+      <div class="pill-stats">
+        <span>${summary.drift_distance_nm} nm</span>
+        <span>${summary.drift_bearing_deg}°</span>
+      </div>
+      <div class="pill-uncertain-role">${role}</div>
+    </div>
+  `;
+  const pill = document.createElement('div');
+  pill.className = 'result-pill result-pill--uncertain';
+  pill.innerHTML = `
+    <div class="pill-uncertain-header">
+      <span class="pill-uncertain-tag">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        Time uncertain
+      </span>
+    </div>
+    <div class="pill-uncertain-rows">
+      ${row(pair.earliest.color, eLast, eS, 'earliest')}
+      ${row(pair.latest.color,   lLast, lS, 'latest')}
+    </div>
+    <div class="pill-actions">
+      <button class="pill-btn pattern" aria-label="Search pattern">Pattern</button>
+      <a class="pill-btn" href="${pair.gpxUrl}" download="drift-${pair.id}-uncertain.gpx">GPX</a>
+      <a class="pill-btn" href="${pair.kmlUrl}" download="drift-${pair.id}-uncertain.kml">KML</a>
+      <button class="pill-btn remove" aria-label="Remove">×</button>
+    </div>
+  `;
+
+  pill.addEventListener('click', (e) => {
+    if (e.target.closest('.pill-btn')) return;
+    fitToRun(pair);
+  });
+
+  pill.querySelector('.remove').addEventListener('click', (e) => {
+    e.stopPropagation();
+    removeRun(pair.id);
+  });
+
+  pill.querySelector('.pattern').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openPatternCard(pair.earliest);
   });
 
   return pill;
@@ -1196,10 +1470,10 @@ const patSectorSection  = document.getElementById('patSectorSection');
 // the two layers read as distinct concepts.
 const PATTERN_COLOR = '#0066FF';
 
-let activePatternRunId = null;  // which run the dialog is generating for
+let activePatternRun = null;  // which run the dialog is generating for
 
 function openPatternCard(run) {
-  activePatternRunId = run.id;
+  activePatternRun = run;
   const last = run.positions[run.positions.length - 1];
   patLat.value = last.lat.toFixed(6);
   patLon.value = last.lon.toFixed(6);
@@ -1223,7 +1497,7 @@ function openPatternCard(run) {
 
 function closePatternCard() {
   patternCardWrap.classList.add('hidden');
-  activePatternRunId = null;
+  activePatternRun = null;
 }
 
 // Show/hide conditional sections based on the chosen pattern type. Mirrors
@@ -1277,8 +1551,7 @@ btnGeneratePattern.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Request failed');
 
-    const run = runs.find(r => r.id === activePatternRunId);
-    if (run) drawPatternForRun(run, data.lines);
+    if (activePatternRun) drawPatternForRun(activePatternRun, data.lines);
 
     closePatternCard();
   } catch (err) {
@@ -1346,3 +1619,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (res.ok) fullTree = await res.json();
   } catch (e) { console.error('Preload hierarchy failed', e); }
 });
+
+const normalStartWrapper = document.getElementById('normalStartWrapper');
+const uncertainTimesDiv = document.getElementById('uncertainTimes');
+const chkTimeUncertain = document.getElementById('chkTimeUncertain');
+const inpEarliestLKP = document.getElementById('inpEarliestLKP');
+const inpLatestLKP = document.getElementById('inpLatestLKP');
+
+function setDefaultUncertainTimes() {
+  const start = inpStart.value;
+  if (start) {
+    const startDate = new Date(start);
+    if (!isNaN(startDate)) {
+      const earliest = new Date(startDate.getTime() - 2 * 60 * 60 * 1000); // 2 hours earlier
+      inpEarliestLKP.value = toLocalDatetime(earliest);
+      inpLatestLKP.value = toLocalDatetime(startDate);
+    }
+  }
+}
+
+chkTimeUncertain.addEventListener('change', () => {
+  const isUncertain = chkTimeUncertain.checked;
+  normalStartWrapper.style.display = isUncertain ? 'none' : 'block';
+  uncertainTimesDiv.classList.toggle('hidden', !isUncertain);
+  if (isUncertain) setDefaultUncertainTimes();
+});
+
+inpStart.addEventListener('change', setDefaultUncertainTimes);
+
+setDefaultUncertainTimes();

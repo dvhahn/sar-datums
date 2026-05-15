@@ -335,6 +335,79 @@ body {
 }
 
 /* ============================================================
+   Time-uncertainty pill — earliest + latest LKP collapsed into
+   a single pill with two stacked coord rows and a tag header.
+   ============================================================ */
+.result-pill--uncertain {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px 10px 8px 14px;
+}
+
+.pill-uncertain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+}
+
+.pill-uncertain-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pill-uncertain-tag svg {
+  width: 11px;
+  height: 11px;
+  opacity: 0.7;
+}
+
+.pill-uncertain-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pill-uncertain-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.pill-uncertain-row .pill-coord {
+  font-size: 12.5px;
+}
+
+.pill-uncertain-row .pill-stats {
+  font-size: 11px;
+}
+
+.pill-uncertain-role {
+  margin-left: auto;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  opacity: 0.75;
+}
+
+.result-pill--uncertain .pill-actions {
+  margin-left: 0;
+  justify-content: flex-end;
+  padding-top: 2px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ============================================================
    Credit pill — bottom-left, above nav controls.
    Hover/focus expands upward to reveal team roster.
    Team Hammerklavier — Beethoven Op. 106.
@@ -1100,15 +1173,45 @@ body {
 }
 
 .selected-object-name {
-  display: inline-block;
-  padding: 10px 14px;
-  font-weight: 500;
   background: var(--color-hover);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
   font-family: var(--font-mono);
   font-size: 13px;
+  padding: 8px 12px;
+  line-height: 1.2;
   color: var(--color-text);
-  margin-right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 370px;
+  min-width: 370px;
+  box-sizing: border-box;
+}
+
+.btn-outline {
+  padding: 8px 12px;
+  line-height: 1.2;
+  font-size: 13px;
+  font-family: var(--font-ui);
+  background: var(--color-hover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 370px;
+  min-width: 370px;
+}
+
+#object-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .object-picker {
@@ -1301,4 +1404,29 @@ body {
 .btn-get-wind.loading {
   opacity: 0.6;
   pointer-events: none;
+}
+
+#uncertainTimes {
+  margin-top: 8px;
+  padding: 8px 4px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+}
+
+#uncertainTimes .form-row {
+  gap: 6px;
+}
+
+#uncertainTimes .field input {
+  margin-bottom: 8px 10px;
+  font-size: 12px;
+}
+
+#uncertainTimes .form-label {
+  margin-top: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-dim);
 }
