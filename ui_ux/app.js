@@ -1281,6 +1281,7 @@ function redrawAllRuns() {
     } else {
       run.markers?.forEach(m => m.remove());
       drawRun(run);
+      if (run.patternLines?.length) drawPatternForRun(run, run.patternLines);
     }
   });
 }
@@ -1567,6 +1568,7 @@ btnGeneratePattern.addEventListener('click', async () => {
 // against the run so removeRun() can clean it up.
 function drawPatternForRun(run, lines) {
   removePatternForRun(run);
+  run.patternLines = lines;
 
   const sourceId = `run-${run.id}-pattern`;
   const layerId  = sourceId;
