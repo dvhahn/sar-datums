@@ -12,7 +12,9 @@ const map = new maplibregl.Map({
 
 map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
 map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
-map.addControl(new maplibregl.ScaleControl({ unit: 'nautical', maxWidth: 120 }), 'top-right');
+// ScaleControl on bottom-right stacks above the (compact) attribution and
+// avoids colliding with the top-bar toggles when the viewport narrows.
+map.addControl(new maplibregl.ScaleControl({ unit: 'nautical', maxWidth: 120 }), 'bottom-right');
 
 
 // ── Currents arrow image: bezier S-curve tail + filled head, white-on-alpha
