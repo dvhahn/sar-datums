@@ -864,7 +864,13 @@ btnCalculate.addEventListener('click', async () => {
       const gpxUrl = makeBlobUrl(combinedGpx, 'application/gpx+xml');
       const kmlUrl = makeBlobUrl(combinedKml, 'application/vnd.google-earth.kml+xml');
 
-      addUncertaintyPair(results[0], results[1], { ...meta, gpxUrl, kmlUrl });
+      // baseGpxText/baseKmlText kept so the pattern generator can rebuild
+      // a combined GPX/KML that also embeds the search pattern + datum.
+      addUncertaintyPair(results[0], results[1], {
+        ...meta, gpxUrl, kmlUrl,
+        baseGpxText: combinedGpx,
+        baseKmlText: combinedKml,
+      });
     } else {
       // Normal single-run mode
         const earlier = inpStart.value + ':00';
@@ -878,7 +884,11 @@ btnCalculate.addEventListener('click', async () => {
         ]);
         const gpxUrl = makeBlobUrl(gpxText, 'application/gpx+xml');
         const kmlUrl = makeBlobUrl(kmlText, 'application/vnd.google-earth.kml+xml');
-        addRun(data, { ...meta, gpxUrl, kmlUrl });
+        addRun(data, {
+          ...meta, gpxUrl, kmlUrl,
+          baseGpxText: gpxText,
+          baseKmlText: kmlText,
+        });
     }
     closeCard();
   } catch (err) {
@@ -911,6 +921,50 @@ function combineGpxTexts(earliestText, latestText) {
     '</gpx>',
   ].join('\n');
 }
+
+// Build a <wpt> for the search-pattern centre. <sym>circle,red</sym> is
+// what Peter's VBA emits and what most chart plotters render as a marker.
+function datumToGpxWaypoint(lat, lon, name = 'SAR Datum') {
+  return `<wpt lat="${lat}" lon="${lon}"><name>${name}</name><sym>circle,red</sym></wpt>`;
+}
+
+function datumToKmlPlacemark(lat, lon, name = 'SAR Datum') {
+  return `<Placemark><name>${name}</name><Point><coordinates>${lon},${lat},0</coordinates></Point></Placemark>`;
+}
+
+// Pattern lines → <rte> blocks. Sector search returns multiple polylines
+// (one per leg); each becomes its own route so chart plotters keep them
+// labelled and selectable individually.
+function patternToGpxRoutes(lines, patternName) {
+  return lines.map((line, i) => {
+    const points = line.map(p => `<rtept lat="${p.lat}" lon="${p.lon}"></rtept>`).join('\n');
+    const name = lines.length > 1 ? `${patternName} ${i + 1}` : patternName;
+    return `<rte><name>${name}</name>\n${points}\n</rte>`;
+  }).join('\n');
+}
+
+function patternToKmlPlacemarks(lines, patternName) {
+  return lines.map((line, i) => {
+    const coords = line.map(p => `${p.lon},${p.lat},0`).join(' ');
+    const name = lines.length > 1 ? `${patternName} ${i + 1}` : patternName;
+    return `<Placemark><name>${name}</name><LineString><coordinates>${coords}</coordinates></LineString></Placemark>`;
+  }).join('\n');
+}
+
+// Append-only XML injection: insert `content` just before the closing tag.
+// Keeps the original drift track + start/end placemarks untouched.
+function injectBeforeTag(baseText, closingTag, content) {
+  if (!baseText || !content) return baseText;
+  return baseText.replace(closingTag, `${content}\n${closingTag}`);
+}
+
+// Map of pattern type → human-readable name used in the GPX/KML route labels.
+const PATTERN_NAMES = {
+  creeping_line: 'Creeping Line',
+  expanding_square: 'Expanding Square',
+  sector: 'Sector Search',
+  circle: 'Expanding Circle',
+};
 
 function combineKmlTexts(earliestText, latestText) {
   const styleRegex     = /<Style[\s\S]*?<\/Style>/g;
@@ -996,6 +1050,8 @@ function addUncertaintyPair(earliestResult, latestResult, meta) {
     latestTime: latestResult.time,
     gpxUrl: meta.gpxUrl,
     kmlUrl: meta.kmlUrl,
+    baseGpxText: meta.baseGpxText,
+    baseKmlText: meta.baseKmlText,
     startLat: meta.startLat,
     startLon: meta.startLon,
     shadeLayerId: `shade-${pairId}`,
@@ -1554,7 +1610,16 @@ btnGeneratePattern.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Request failed');
 
-    if (activePatternRun) drawPatternForRun(activePatternRun, data.lines);
+    if (activePatternRun) {
+      drawPatternForRun(activePatternRun, data.lines);
+      // For an uncertainty pair the pattern dialog targets pair.earliest,
+      // but the GPX/KML download lives on the pair itself. Walk up to the
+      // owning container so we update the correct download URLs.
+      const container = activePatternRun.parentId
+        ? runs.find(r => r.id === activePatternRun.parentId)
+        : activePatternRun;
+      if (container) attachPatternToDownloads(container, data.lines, body);
+    }
 
     closePatternCard();
   } catch (err) {
@@ -1701,6 +1766,34 @@ function removePatternForRun(run) {
   run.patternSources?.forEach(id => { if (map.getSource(id)) map.removeSource(id); });
   run.patternLayers = [];
   run.patternSources = [];
+}
+
+// Rebuild the run's GPX/KML downloads to also include the just-generated
+// pattern routes + a datum waypoint at the pattern centre. We always start
+// from baseGpxText/baseKmlText (drift only) so re-generating a pattern
+// replaces the previous one cleanly instead of stacking.
+function attachPatternToDownloads(container, lines, body) {
+  if (!container.baseGpxText || !container.baseKmlText) return;
+  const patternName = PATTERN_NAMES[body.type] || 'Search Pattern';
+  const datumLat = parseFloat(body.datum_lat);
+  const datumLon = parseFloat(body.datum_lon);
+
+  const datumGpx     = datumToGpxWaypoint(datumLat, datumLon);
+  const patternGpx   = patternToGpxRoutes(lines, patternName);
+  const datumKml     = datumToKmlPlacemark(datumLat, datumLon);
+  const patternKml   = patternToKmlPlacemarks(lines, patternName);
+
+  let nextGpx = injectBeforeTag(container.baseGpxText, '</gpx>',      `${datumGpx}\n${patternGpx}`);
+  let nextKml = injectBeforeTag(container.baseKmlText, '</Document>', `${datumKml}\n${patternKml}`);
+
+  if (container.gpxUrl) URL.revokeObjectURL(container.gpxUrl);
+  if (container.kmlUrl) URL.revokeObjectURL(container.kmlUrl);
+  container.gpxUrl = makeBlobUrl(nextGpx, 'application/gpx+xml');
+  container.kmlUrl = makeBlobUrl(nextKml, 'application/vnd.google-earth.kml+xml');
+
+  // Pills hold the URLs in their HTML — re-render so the GPX/KML buttons
+  // pick up the fresh blob URLs.
+  renderPills();
 }
 
 
