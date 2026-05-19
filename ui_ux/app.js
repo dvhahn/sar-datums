@@ -1566,6 +1566,94 @@ btnGeneratePattern.addEventListener('click', async () => {
   }
 });
 
+// ── Sweep Width Calculator ────────────────────────────────────────────────
+const btnCalcSweep     = document.getElementById('btnCalcSweep');
+const sweepCalc        = document.getElementById('sweepCalc');
+const btnSweepCalcClose = document.getElementById('btnSweepCalcClose');
+const swObject         = document.getElementById('swObject');
+const swVisibility     = document.getElementById('swVisibility');
+const swFatigued       = document.getElementById('swFatigued');
+const swNumAssets      = document.getElementById('swNumAssets');
+const sweepCalcError   = document.getElementById('sweepCalcError');
+const btnRunSweepCalc  = document.getElementById('btnRunSweepCalc');
+const sweepResults     = document.getElementById('sweepResults');
+const btnApplySweep    = document.getElementById('btnApplySweep');
+
+// Load sweep object list from backend
+async function loadSweepObjects() {
+  try {
+    const res = await fetch('/api/sweep-objects');
+    const names = await res.json();
+    swObject.innerHTML = names.map(n =>
+      `<option value="${n}">${n.replace(/\b\w/g, c => c.toUpperCase())}</option>`
+    ).join('');
+  } catch (_) { /* non-fatal */ }
+}
+loadSweepObjects();
+
+btnCalcSweep.addEventListener('click', () => {
+  sweepCalc.classList.toggle('hidden');
+  sweepResults.classList.add('hidden');
+  sweepCalcError.classList.add('hidden');
+});
+
+btnSweepCalcClose.addEventListener('click', () => {
+  sweepCalc.classList.add('hidden');
+});
+
+btnRunSweepCalc.addEventListener('click', async () => {
+  sweepCalcError.classList.add('hidden');
+  sweepResults.classList.add('hidden');
+  btnRunSweepCalc.disabled = true;
+  btnRunSweepCalc.textContent = 'Calculating…';
+
+  const eyeEl = document.querySelector('input[name="swEye"]:checked');
+  const weatherEl = document.querySelector('input[name="swWeather"]:checked');
+  const body = {
+    object_name:    swObject.value,
+    visibility_nm:  parseFloat(swVisibility.value),
+    height_of_eye:  eyeEl ? eyeEl.value : '8',
+    wind_speed_kts: 0,
+    sea_state:      weatherEl ? weatherEl.value : 'calm',
+    fatigued:       swFatigued.checked,
+    num_assets:     parseInt(swNumAssets.value, 10),
+  };
+
+  try {
+    const res = await fetch('/api/sweep-width', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Calculation failed');
+
+    document.getElementById('swResultBase').textContent    = `${data.unadjusted_sw} nm`;
+    document.getElementById('swResultWeather').textContent = `× ${data.weather_factor}`;
+    document.getElementById('swResultFatigue').textContent = data.fatigue_factor < 1
+      ? `× ${data.fatigue_factor} (fatigued)`
+      : '× 1.0';
+    document.getElementById('swResultAdjusted').textContent = `${data.adjusted_sw} nm`;
+    document.getElementById('swResultSpacing').textContent  = `${data.track_spacing} nm`;
+
+    sweepResults.classList.remove('hidden');
+  } catch (err) {
+    sweepCalcError.textContent = err.message;
+    sweepCalcError.classList.remove('hidden');
+  } finally {
+    btnRunSweepCalc.disabled = false;
+    btnRunSweepCalc.textContent = 'Calculate Sweep Width';
+  }
+});
+
+btnApplySweep.addEventListener('click', () => {
+  const spacing = document.getElementById('swResultSpacing').textContent.replace(' nm', '');
+  if (spacing && spacing !== '—') {
+    patSweep.value = spacing;
+    sweepCalc.classList.add('hidden');
+  }
+});
+
 // Draws the pattern as a dashed line layer on top of the drift track. Stored
 // against the run so removeRun() can clean it up.
 function drawPatternForRun(run, lines) {

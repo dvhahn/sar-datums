@@ -346,12 +346,124 @@
         </section>
 
         <section class="form-section">
-          <div class="form-label">Sweep width</div>
+          <div class="form-label-row">
+            <div class="form-label">Sweep width</div>
+            <button type="button" class="btn-get-wind" id="btnCalcSweep">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              Calculate
+            </button>
+          </div>
           <label class="field">
             <span>Spacing (nm)</span>
             <input type="number" id="patSweep" value="0.5" min="0.05" step="0.05">
           </label>
         </section>
+
+        <!-- Sweep Width Calculator (inline, hidden by default) -->
+        <div class="sweep-calc hidden" id="sweepCalc">
+          <div class="sweep-calc-header">
+            <span>Sweep Width Calculator</span>
+            <button type="button" class="sweep-calc-close" id="btnSweepCalcClose" aria-label="Close calculator">×</button>
+          </div>
+
+          <section class="form-section">
+            <div class="form-label">Object</div>
+            <label class="field">
+              <select id="swObject"></select>
+            </label>
+          </section>
+
+          <section class="form-section">
+            <div class="form-label">Visibility</div>
+            <label class="field">
+              <span>Visibility (nm)</span>
+              <input type="number" id="swVisibility" value="5" min="0.1" max="20" step="0.5">
+            </label>
+          </section>
+
+          <section class="form-section">
+            <div class="form-label">Height of Eye</div>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" name="swEye" id="swEye8" value="8" checked>
+                <span>8 ft (vessel deck)</span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="swEye" id="swEye14" value="14">
+                <span>14 ft (bridge / elevated)</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="form-label">Weather Correction</div>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" name="swWeather" id="swWeather0" value="calm" checked>
+                <span>No weather correction</span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="swWeather" id="swWeather15" value="moderate">
+                <span>Winds &gt; 15 kts / Seas 2–3 ft</span>
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="swWeather" id="swWeather25" value="rough">
+                <span>Winds &gt; 25 kts / Seas &gt; 4 ft</span>
+              </label>
+            </div>
+          </section>
+
+          <div class="toggle-row">
+            <span>Searching staff fatigued</span>
+            <label class="toggle">
+              <input type="checkbox" id="swFatigued">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <section class="form-section">
+            <div class="form-label">Search Assets</div>
+            <label class="field">
+              <span>Number of vessels/aircraft</span>
+              <input type="number" id="swNumAssets" value="1" min="1" max="20" step="1">
+            </label>
+          </section>
+
+          <div class="form-error hidden" id="sweepCalcError" role="alert"></div>
+
+          <button type="button" class="btn-primary" id="btnRunSweepCalc">Calculate Sweep Width</button>
+
+          <div class="sweep-results hidden" id="sweepResults">
+            <div class="results-header">Sweep Width Results</div>
+            <div class="results-grid">
+              <div class="result-item">
+                <span class="result-label">Base SW</span>
+                <span class="result-value" id="swResultBase">—</span>
+              </div>
+              <div class="result-item">
+                <span class="result-label">Weather Factor</span>
+                <span class="result-value" id="swResultWeather">—</span>
+              </div>
+              <div class="result-item">
+                <span class="result-label">Fatigue Factor</span>
+                <span class="result-value" id="swResultFatigue">—</span>
+              </div>
+              <div class="result-item">
+                <span class="result-label">Adjusted SW</span>
+                <span class="result-value" id="swResultAdjusted">—</span>
+              </div>
+              <div class="result-item">
+                <span class="result-label">Track Spacing</span>
+                <span class="result-value" id="swResultSpacing">—</span>
+              </div>
+            </div>
+            <button type="button" class="btn-primary" id="btnApplySweep">Apply to Pattern</button>
+          </div>
+        </div>
 
         <div class="form-error hidden" id="patError" role="alert"></div>
 

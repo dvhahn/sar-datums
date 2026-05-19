@@ -1545,3 +1545,99 @@ body {
     font-size: 9.5px;
   }
 }
+/* ── Sweep Width Calculator ─────────────────────────────────── */
+.sweep-calc {
+  margin-top: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--color-hover);
+}
+
+.sweep-calc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-dim);
+  margin-bottom: 12px;
+}
+
+.sweep-calc-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--color-text-dim);
+  padding: 0 2px;
+}
+.sweep-calc-close:hover { color: var(--color-text); }
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+.radio-option input[type="radio"] {
+  accent-color: var(--color-accent);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.sweep-results {
+  margin-top: 14px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 12px;
+}
+
+.sweep-results .results-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-dim);
+  margin-bottom: 10px;
+}
+
+.sweep-results .results-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sweep-results .result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sweep-results .result-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-dim);
+}
+
+.sweep-results .result-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}

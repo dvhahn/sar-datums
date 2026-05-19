@@ -14,6 +14,7 @@ from services.lne import generate_creeping_line
 from services.squ import generate_expanding_square
 from services.sect import generate_sector_search
 from services.wind import get_wind
+from services.sweep import calculate_sweep_width, SWEEP_OBJECTS
 from database.db_config import get_connection
 
 app = Flask(__name__, static_folder='ui_ux', static_url_path='')
@@ -458,6 +459,46 @@ def accuracy():
     result = compare_tracks(our_positions, ref_coords)
     result['database_queried'] = db_target
 
+    return jsonify(result)
+
+
+@app.route('/api/sweep-objects')
+def sweep_objects():
+    """List object names available in the sweep width lookup table."""
+    return jsonify(SWEEP_OBJECTS)
+
+
+@app.route('/api/sweep-width', methods=['POST'])
+def sweep_width():
+    """Calculate sweep width and track spacing.
+
+    Body (JSON):
+      object_name     str   — must match a key in the sweep width table
+      visibility_nm   float — meteorological visibility in nautical miles
+      height_of_eye   str   — '8' or '14' (feet)
+      wind_speed_kts  float — current wind speed (used for weather correction)
+      sea_state       str   — 'calm' | 'moderate' | 'rough'
+      fatigued        bool  — whether searching staff are fatigued
+      num_assets      int   — number of search assets
+
+    Returns: unadjusted_sw, weather_factor, fatigue_factor,
+             adjusted_sw, track_spacing, num_assets
+    """
+    data = request.get_json(force=True) or {}
+    try:
+        result = calculate_sweep_width(
+            object_name=data['object_name'],
+            visibility_nm=float(data['visibility_nm']),
+            height_of_eye=str(data.get('height_of_eye', '8')),
+            wind_speed_kts=float(data.get('wind_speed_kts', 0)),
+            sea_state=data.get('sea_state', 'calm'),
+            fatigued=bool(data.get('fatigued', False)),
+            num_assets=int(data.get('num_assets', 1)),
+        )
+    except KeyError as e:
+        return jsonify({"error": f"Missing field: {e}"}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify(result)
 
 
