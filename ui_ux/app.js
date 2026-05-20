@@ -366,8 +366,8 @@ async function fetchDrift(startTime, endTime) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      lat: parseFloat(inpLat.value),
-      lon: parseFloat(inpLon.value),
+      lat: currentDecimalLat,
+      lon: currentDecimalLon,
       start_time: startTime,
       end_time: endTime,
       wind_speed: parseFloat(inpWindSpeed.value),
@@ -593,8 +593,9 @@ fab.addEventListener('pointerup', (e) => {
 
   if (droppedOnMap) {
     const lngLat = map.unproject([e.clientX, e.clientY]);
-    inpLat.value = lngLat.lat.toFixed(5);
-    inpLon.value = lngLat.lng.toFixed(5);
+    currentDecimalLat = lngLat.lat;
+    currentDecimalLon = lngLat.lng;
+    updateInputsFromDecimal();
   }
 
   // Reset FAB + anchor visuals
@@ -826,8 +827,8 @@ btnCalculate.addEventListener('click', async () => {
     const isReverse = inpReverse.checked;
     const meta = {
         isReverse: isReverse,
-        startLat: parseFloat(inpLat.value),
-        startLon: parseFloat(inpLon.value),
+        startLat: currentDecimalLat,
+        startLon: currentDecimalLon,
     };
 
 
@@ -1796,6 +1797,68 @@ function attachPatternToDownloads(container, lines, body) {
   renderPills();
 }
 
+// Convert decimal degrees to DMS string (e.g., -36.8 → "36° 48' 00\" S")
+function decimalToDMS(decimal, isLat) {
+  const dir = isLat ? (decimal >= 0 ? 'N' : 'S') : (decimal >= 0 ? 'E' : 'W');
+  const abs = Math.abs(decimal);
+  const deg = Math.floor(abs);
+  const minFloat = (abs - deg) * 60;
+  const min = Math.floor(minFloat);
+  const sec = ((minFloat - min) * 60).toFixed(2);
+  return `${deg}° ${min}' ${sec}" ${dir}`;
+}
+
+// Convert DMS string to decimal degrees
+function dmsToDecimal(dmsStr) {
+  const parts = dmsStr.match(/(\d+)°\s*(\d+)'?\s*([\d.]+)"?\s*([NSEW])/i);
+  if (!parts) return NaN;
+  const deg = parseInt(parts[1]);
+  const min = parseInt(parts[2]);
+  const sec = parseFloat(parts[3]);
+  const dir = parts[4].toUpperCase();
+  let decimal = deg + min / 60 + sec / 3600;
+  if (dir === 'S' || dir === 'W') decimal = -decimal;
+  return decimal;
+}
+
+// Convert decimal degrees to DM (degrees + decimal minutes) string
+function decimalToDM(decimal, isLat) {
+  const dir = isLat ? (decimal >= 0 ? 'N' : 'S') : (decimal >= 0 ? 'E' : 'W');
+  const abs = Math.abs(decimal);
+  const deg = Math.floor(abs);
+  const min = ((abs - deg) * 60).toFixed(3);
+  return `${deg}° ${min}' ${dir}`;
+}
+
+// Convert DM string (e.g., "36° 48.000' S") to decimal
+function dmToDecimal(dmStr) {
+  const parts = dmStr.match(/(\d+)°\s*([\d.]+)'?\s*([NSEW])/i);
+  if (!parts) return NaN;
+  const deg = parseInt(parts[1]);
+  const min = parseFloat(parts[2]);
+  const dir = parts[3].toUpperCase();
+  let decimal = deg + min / 60;
+  if (dir === 'S' || dir === 'W') decimal = -decimal;
+  return decimal;
+}
+
+// Helper: format decimal according to current format
+function formatCoord(decimal, isLat, format) {
+  if (isNaN(decimal)) return '';
+  if (format === 'deg') return decimal.toFixed(6);
+  if (format === 'dm') return decimalToDM(decimal, isLat);
+  if (format === 'dms') return decimalToDMS(decimal, isLat);
+  return decimal;
+}
+
+// Helper: parse string according to current format
+function parseCoord(str, format) {
+  if (!str) return NaN;
+  if (format === 'deg') return parseFloat(str);
+  if (format === 'dm') return dmToDecimal(str);
+  if (format === 'dms') return dmsToDecimal(str);
+  return NaN;
+}
 
 // Preload the CSV-driven object hierarchy so the picker has data when it opens.
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1853,3 +1916,55 @@ chkTimeUncertain.addEventListener('change', () => {
 inpStart.addEventListener('change', setDefaultUncertainTimes);
 
 setDefaultUncertainTimes();
+
+// Coordinate format switcher (Degrees / DM / DMS) ─────────────────
+const latInput = document.getElementById('inpLat');
+const lonInput = document.getElementById('inpLon');
+const latLabel = document.getElementById('latLabel');
+const lonLabel = document.getElementById('lonLabel');
+const radioDeg = document.querySelector('input[value="deg"]');
+const radioDM = document.querySelector('input[value="dm"]');
+const radioDMS = document.querySelector('input[value="dms"]');
+
+let currentFormat = 'deg';      // 'deg', 'dm', or 'dms'
+let currentDecimalLat = -36.8;
+let currentDecimalLon = 174.8;
+
+function updateInputsFromDecimal() {
+  latInput.value = formatCoord(currentDecimalLat, true, currentFormat);
+  lonInput.value = formatCoord(currentDecimalLon, false, currentFormat);
+  if (currentFormat === 'deg') {
+    latLabel.textContent = 'Latitude (deg)';
+    lonLabel.textContent = 'Longitude (deg)';
+  } else if (currentFormat === 'dm') {
+    latLabel.textContent = 'Latitude (deg min)';
+    lonLabel.textContent = 'Longitude (deg min)';
+  } else {
+    latLabel.textContent = 'Latitude (deg min sec)';
+    lonLabel.textContent = 'Longitude (deg min sec)';
+  }
+}
+
+function setFormat(format) {
+  currentFormat = format;
+  updateInputsFromDecimal();
+}
+
+function onCoordInput() {
+  const newLat = parseCoord(latInput.value, currentFormat);
+  const newLon = parseCoord(lonInput.value, currentFormat);
+  if (!isNaN(newLat)) currentDecimalLat = newLat;
+  if (!isNaN(newLon)) currentDecimalLon = newLon;
+  updateInputsFromDecimal();   // re‑format if needed
+}
+
+// Event listeners for radio buttons
+radioDeg.addEventListener('change', () => setFormat('deg'));
+radioDM.addEventListener('change', () => setFormat('dm'));
+radioDMS.addEventListener('change', () => setFormat('dms'));
+
+latInput.addEventListener('blur', onCoordInput);
+lonInput.addEventListener('blur', onCoordInput);
+
+// Initial display
+setFormat('deg');

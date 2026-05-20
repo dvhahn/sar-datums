@@ -1679,3 +1679,36 @@ body {
   color: var(--color-text);
 }
 
+.coord-format-row {
+  margin-bottom: 12px;
+}
+.radio-group.inline {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.radio-group.inline {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin: 8px 0;
+}
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.coord-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
