@@ -105,6 +105,11 @@ body {
   color: var(--color-text-dim) !important;
 }
 
+/* Prevent FAB from overlapping scale control */
+.maplibregl-ctrl-bottom-right {
+  padding-bottom: 80px !important;
+}
+
 .maplibregl-ctrl-scale {
   background: var(--color-surface) !important;
   backdrop-filter: var(--blur-glass);
@@ -928,7 +933,9 @@ body {
   position: relative;
   width: 420px;
   max-width: 92vw;
+  max-height: 85vh;
   padding: 24px;
+  overflow-y: auto;
 
   background: var(--color-surface);
   backdrop-filter: var(--blur-glass);
