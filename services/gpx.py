@@ -1,89 +1,79 @@
 from domain.model import Coordinate
 from datetime import datetime
+from xml.sax.saxutils import escape
+
+# Identifies our app while crediting the source workbook. Visible in any
+# chart plotter that surfaces the GPX creator attribute. The "&" gets
+# escaped to "&amp;" at serialisation time so strict XML parsers stay happy
+# — chart plotters render it back as "&".
+_CREATOR = "Peter Comer (pci590@police.govt.nz) & UoA CS399 Team 19 Hammerklavier"
+
+_GPX_OPEN = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    f'<gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="{escape(_CREATOR)}" >'
+)
+
+
+def _peter_time(dt: datetime) -> str:
+    """Peter's HHMM dd mmm yy NZ-local format, e.g. '0300 28 Apr 26'."""
+    return dt.strftime("%H%M %d %b %y")
 
 
 def generate_gpx(positions: list[tuple[Coordinate, datetime]], name: str) -> str:
+    """Single drift track as a Peter-style ``<rte>``.
+
+    Timestamps live inside each ``<rtept>``'s ``<name>`` so they appear as
+    waypoint labels on chart plotters that don't render ISO ``<time>``.
     """
-    Generate a GPX (GPS Exchange Format) file as a string from a list of positions.
+    lines = [_GPX_OPEN, "<rte>", f"<name>{name}</name>"]
 
-    Args:
-        positions: List of tuples, each containing (Coordinate object, datetime).
-        name: Name of the track (appears in the GPX file).
-
-    Returns:
-        A string containing the complete GPX XML document.
-    """
-
-    # Start with an empty list to collect lines of the GPX file
-    gpx = []
-    # XML declaration (required)
-    gpx.append('<?xml version="1.0" encoding="UTF-8"?>')
-    # Root element with GPX version 1.1, creator info, and namespace
-    gpx.append('<gpx version="1.1" creator="Drift Simulator" xmlns="http://www.topografix.com/GPX/1/1">')
-
-    # add track
-    gpx.append(f"<trk>")
-    gpx.append(f"<name>{name}</name>")
-
-    # Track segment (<trkseg>) – contains the actual track points
-    gpx.append("<trkseg>")
-
-    # Loop over each position (coordinate + datetime)
-    # Times are NZ local (matches Peter's Excel and the tide DB) — no Z suffix.
     for coord, dt in positions:
-        time_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
-        # Start a track point with latitude and longitude attributes
-        gpx.append(f'<trkpt lat="{coord.lat}" lon="{coord.lon}">')
-        # Add the time element inside the track point
-        gpx.append(f'  <time>{time_str}</time>')
-        # Close the track point
-        gpx.append("</trkpt>")
+        label = _peter_time(dt)
+        lines.append(
+            f'<rtept lat="{coord.lat}" lon="{coord.lon}" >'
+            f'<name>{label}</name><sym></sym></rtept>'
+        )
 
-    gpx.append("</trkseg>")
-    gpx.append("</trk>")
-    gpx.append("</gpx>")
-
-    # Join all lines with newline characters to form the final XML string
-    return "\n".join(gpx)
+    lines.append("</rte>")
+    lines.append("</gpx>")
+    return "\n".join(lines)
 
 
-# This function allows us to create a GPX file with multiple tracks in a single file.
-def generate_gpx_multi(tracks: list[tuple[str, list[tuple[Coordinate, datetime]]]], name_prefix: str) -> str:
+def generate_gpx_multi(
+    tracks: list[tuple[str, list[tuple[Coordinate, datetime]]]],
+    name_prefix: str,
+) -> str:
+    """Multiple drift tracks as Peter-style ``<trk>`` blocks.
+
+    Each track gets a red 2px solid-line ``<extensions>`` block (the same
+    style Peter writes for divergence/spread tracks). ``<trkpt>`` keeps an
+    ISO ``<time>`` so divergence runs remain replayable; Peter leaves
+    ``<time></time>`` empty because his spread tracks are time-less.
     """
-    Generate a GPX file that contains multiple tracks (e.g., normal, positive divergence, negative divergence).
+    lines = [_GPX_OPEN]
 
-    Args:
-        tracks: A list where each item is (track_name, list_of_(Coordinate, datetime))
-        name_prefix: The base name for the tracks (e.g., "SAR Drift Prediction")
-
-    Returns:
-        A complete GPX XML string.
-    """
-    gpx = []
-
-    gpx.append('<?xml version="1.0" encoding="UTF-8"?>')
-    gpx.append('<gpx version="1.1" creator="Drift Simulator" xmlns="http://www.topografix.com/GPX/1/1">')
-
-    # Loop through each track (normal, pos_div, neg_div)
     for track_name, points in tracks:
-        gpx.append("<trk>")
-        gpx.append(f"<name>{name_prefix} - {track_name}</name>")
-        gpx.append("<trkseg>")
+        lines.append("<trk>")
+        lines.append(f"<name>{name_prefix} - {track_name}</name>")
+        lines.append(
+            '<extensions> <line xmlns="http://www.topografix.com/GPX/gpx_style/0/2">'
+        )
+        lines.append("<color>ff0000</color>")
+        lines.append("<opacity>1.00</opacity>")
+        lines.append("<width>2.00</width>")
+        lines.append("<pattern>Solid</pattern>")
+        lines.append("</line></extensions>")
+        lines.append("<trkseg>")
 
-        # Add each point with its timestamp
         for coord, dt in points:
-            time_str = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-            gpx.append(f'<trkpt lat="{coord.lat}" lon="{coord.lon}">')
-            gpx.append(f'  <time>{time_str}</time>')
-            gpx.append("</trkpt>")
+            iso = dt.strftime("%Y-%m-%dT%H:%M:%S")
+            lines.append(
+                f'<trkpt lat="{coord.lat}" lon="{coord.lon}" >'
+                f'<time>{iso}</time></trkpt>'
+            )
 
-        gpx.append("</trkseg>")
-        gpx.append("</trk>")
+        lines.append("</trkseg>")
+        lines.append("</trk>")
 
-    gpx.append("</gpx>")
-    return "\n".join(gpx)
-
-
-
-
-
+    lines.append("</gpx>")
+    return "\n".join(lines)
