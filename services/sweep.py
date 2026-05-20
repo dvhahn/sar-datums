@@ -49,7 +49,7 @@ _VIS_COLS = [1, 3, 5, 10, 15, 20]
 # Supported object categories for the frontend dropdown
 SWEEP_OBJECTS = list(_TABLE.keys())
 
-FATIGUE_FACTOR = 0.75  # IAMSAR standard
+FATIGUE_FACTOR = 0.9  # Matches Peter's VBA workbook (SweepWidth.frm FatigueYes_Click)
 
 
 def _interpolate_visibility(row_vals: list, vis: float) -> float:
