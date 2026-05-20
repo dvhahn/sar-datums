@@ -251,7 +251,7 @@ inpEnd.value   = toLocalDatetime(later);
 
 function toLocalDatetime(d) {
   const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // ── Object picker (hierarchical)
@@ -845,8 +845,8 @@ btnCalculate.addEventListener('click', async () => {
       ];
       const results = [];
       for (const { value, role } of labels) {
-        let startTime = value + ':00';
-        let endTime   = arrival + ':00';
+        let startTime = value.replace(' ', 'T') + ':00';
+        let endTime   = arrival.replace(' ', 'T') + ':00';
         if (isReverse) {
           [startTime, endTime] = [endTime, startTime];
         }
@@ -873,8 +873,8 @@ btnCalculate.addEventListener('click', async () => {
       });
     } else {
       // Normal single-run mode
-        const earlier = inpStart.value + ':00';
-        const later = inpEnd.value + ':00';
+        const earlier = inpStart.value.replace(' ', 'T') + ':00';
+        const later   = inpEnd.value.replace(' ', 'T') + ':00';
         const startTime = isReverse ? later : earlier;
         const endTime = isReverse ? earlier : later;
         const data = await fetchDrift(startTime, endTime);
@@ -1803,6 +1803,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     const res = await fetch('/api/object-hierarchy');
     if (res.ok) fullTree = await res.json();
   } catch (e) { console.error('Preload hierarchy failed', e); }
+
+  const datetimeInputs = ['inpStart', 'inpEnd', 'inpEarliestLKP', 'inpLatestLKP'];
+  datetimeInputs.forEach(id => {
+    const input = document.getElementById(id);
+    if (!input) return;
+
+    const fp = flatpickr(input, {
+      enableTime: true,
+      dateFormat: "Y-m-d H:i",
+      time_24hr: true,
+      minuteIncrement: 1,
+      allowInput: true
+    });
+
+    // Connect the calendar button to open the picker
+    const button = document.querySelector(`.datetime-button[data-id="${id}"]`);
+    if (button) {
+      button.addEventListener('click', () => fp.open());
+    }
+  });
 });
 
 const normalStartWrapper = document.getElementById('normalStartWrapper');

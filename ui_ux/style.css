@@ -1641,3 +1641,41 @@ body {
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
+
+/* Datetime picker – 24‑hour, glass style */
+.datetime-wrapper {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+.datetime-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.datetime-button {
+  flex-shrink: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-dim);
+  transition: background 0.15s;
+}
+.datetime-button:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+

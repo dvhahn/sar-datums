@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.1.1/dist/maplibre-gl.css">
   <script src="https://unpkg.com/maplibre-gl@4.1.1/dist/maplibre-gl.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 </head>
 <body>
 
@@ -156,11 +158,17 @@
           <div class="form-row">
             <div id="normalStartWrapper" class="field">
               <span>Start (LKP)</span>
-              <input type="datetime-local" id="inpStart" step="60">
+              <div class="datetime-wrapper">
+                <input type="text" id="inpStart" class="datetime-input" placeholder="YYYY-MM-DD HH:MM">
+                <button type="button" class="datetime-button" data-id="inpStart">📅</button>
+              </div>
             </div>
             <div class="field">
               <span>Arrival (End)</span>
-              <input type="datetime-local" id="inpEnd" step="60">
+              <div class="datetime-wrapper">
+                <input type="text" id="inpEnd" class="datetime-input" placeholder="YYYY-MM-DD HH:MM">
+                <button type="button" class="datetime-button" data-id="inpEnd">📅</button>
+              </div>
             </div>
           </div>
 
@@ -169,15 +177,21 @@
             <div class="form-row">
               <div class="field">
                 <span>Earliest LKP</span>
-                <input type="datetime-local" id="inpEarliestLKP" step="60">
+                <div class="datetime-wrapper">
+                  <input type="text" id="inpEarliestLKP" class="datetime-input" placeholder="YYYY-MM-DD HH:MM">
+                  <button type="button" class="datetime-button" data-id="inpEarliestLKP">📅</button>
+                </div>
               </div>
               <div class="field">
                 <span>Latest LKP</span>
-                <input type="datetime-local" id="inpLatestLKP" step="60">
+                <div class="datetime-wrapper">
+                  <input type="text" id="inpLatestLKP" class="datetime-input" placeholder="YYYY-MM-DD HH:MM">
+                  <button type="button" class="datetime-button" data-id="inpLatestLKP">📅</button>
+                </div>
               </div>
-            </div>
+            </div> <!-- close form-row -->
             <div class="form-label" style="margin-top:8px">Arrival time (unchanged)</div>
-          </div>
+          </div> <!-- close uncertainTimes -->
         </section>
 
         <section class="form-section">
