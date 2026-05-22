@@ -1001,6 +1001,12 @@ body {
   gap: 8px;
 }
 
+/* datetime-local inputs need more room to show full date+time */
+.form-row .field input[type="datetime-local"] {
+  padding: 10px 6px;
+  font-size: 12px;
+}
+
 .field {
   display: flex;
   flex-direction: column;
