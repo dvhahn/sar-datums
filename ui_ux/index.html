@@ -140,28 +140,22 @@
 
       <form class="card-form">
         <section class="form-section">
-          <div class="form-label">Position</div>
-          <div class="coord-format-row">
-            <div class="radio-group inline">
-              <label class="radio-option">
-                <input type="radio" name="coordFormat" value="deg" checked> Degrees
-              </label>
-              <label class="radio-option">
-                <input type="radio" name="coordFormat" value="dm"> Degrees Minutes
-              </label>
-              <label class="radio-option">
-                <input type="radio" name="coordFormat" value="dms"> Degrees Minutes Seconds
-              </label>
+          <div class="form-label-row">
+            <div class="form-label">Position</div>
+            <div class="coord-switcher" id="coordSwitcher">
+              <button type="button" class="switcher-segment" data-format="deg">DEG</button>
+              <button type="button" class="switcher-segment" data-format="dm">DM</button>
+              <button type="button" class="switcher-segment" data-format="dms">DMS</button>
             </div>
           </div>
           <div class="form-row">
             <label class="field">
-              <span id="latLabel">Latitude (deg)</span>
-              <input type="text" id="inpLat" class="coord-input" placeholder="e.g., -36.8">
+              <span>Latitude</span>
+              <input type="text" id="inpLat" class="coord-input" value="-36.8">
             </label>
             <label class="field">
-              <span id="lonLabel">Longitude (deg)</span>
-              <input type="text" id="inpLon" class="coord-input" placeholder="e.g., 174.8">
+              <span>Longitude</span>
+              <input type="text" id="inpLon" class="coord-input" value="174.8">
             </label>
           </div>
         </section>

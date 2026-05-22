@@ -1920,11 +1920,7 @@ setDefaultUncertainTimes();
 // Coordinate format switcher (Degrees / DM / DMS) ─────────────────
 const latInput = document.getElementById('inpLat');
 const lonInput = document.getElementById('inpLon');
-const latLabel = document.getElementById('latLabel');
-const lonLabel = document.getElementById('lonLabel');
-const radioDeg = document.querySelector('input[value="deg"]');
-const radioDM = document.querySelector('input[value="dm"]');
-const radioDMS = document.querySelector('input[value="dms"]');
+const switcherSegments = document.querySelectorAll('.switcher-segment');
 
 let currentFormat = 'deg';      // 'deg', 'dm', or 'dms'
 let currentDecimalLat = -36.8;
@@ -1933,20 +1929,17 @@ let currentDecimalLon = 174.8;
 function updateInputsFromDecimal() {
   latInput.value = formatCoord(currentDecimalLat, true, currentFormat);
   lonInput.value = formatCoord(currentDecimalLon, false, currentFormat);
-  if (currentFormat === 'deg') {
-    latLabel.textContent = 'Latitude (deg)';
-    lonLabel.textContent = 'Longitude (deg)';
-  } else if (currentFormat === 'dm') {
-    latLabel.textContent = 'Latitude (deg min)';
-    lonLabel.textContent = 'Longitude (deg min)';
-  } else {
-    latLabel.textContent = 'Latitude (deg min sec)';
-    lonLabel.textContent = 'Longitude (deg min sec)';
-  }
 }
 
 function setFormat(format) {
   currentFormat = format;
+  switcherSegments.forEach(btn => {
+    if (btn.dataset.format === format) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
   updateInputsFromDecimal();
 }
 
@@ -1955,14 +1948,12 @@ function onCoordInput() {
   const newLon = parseCoord(lonInput.value, currentFormat);
   if (!isNaN(newLat)) currentDecimalLat = newLat;
   if (!isNaN(newLon)) currentDecimalLon = newLon;
-  updateInputsFromDecimal();   // re‑format if needed
+  updateInputsFromDecimal();
 }
 
-// Event listeners for radio buttons
-radioDeg.addEventListener('change', () => setFormat('deg'));
-radioDM.addEventListener('change', () => setFormat('dm'));
-radioDMS.addEventListener('change', () => setFormat('dms'));
-
+switcherSegments.forEach(btn => {
+  btn.addEventListener('click', () => setFormat(btn.dataset.format));
+});
 latInput.addEventListener('blur', onCoordInput);
 lonInput.addEventListener('blur', onCoordInput);
 
