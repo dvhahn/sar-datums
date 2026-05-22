@@ -254,6 +254,27 @@ function toLocalDatetime(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// ── Tidal data window ────────────────────────────────────────────────────
+// Bounds the date pickers so the user can't pick a time the tide DB can't
+// cover. The backend validates this too — out-of-range times silently drift
+// on zero current otherwise, producing plausible-looking but invalid results.
+let dataRange = null;  // { min: Date, max: Date }
+
+async function loadDataRange() {
+  try {
+    const res = await fetch('/api/data-range');
+    if (!res.ok) return;
+    const { min, max } = await res.json();
+    dataRange = { min: new Date(min), max: new Date(max) };
+    const clip = s => s.slice(0, 16);  // datetime-local wants YYYY-MM-DDTHH:MM
+    ['inpStart', 'inpEnd', 'inpEarliestLKP', 'inpLatestLKP'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.min = clip(min); el.max = clip(max); }
+    });
+  } catch (_) { /* non-fatal — backend still rejects out-of-range times */ }
+}
+loadDataRange();
+
 // ── Object picker (hierarchical)
 const btnSelectObject = document.getElementById('btnSelectObject');
 const btnChangeObject = document.getElementById('btnChangeObject');
@@ -805,6 +826,13 @@ function validateDriftForm() {
   if (!inpStart.value)                 return 'Pick a start time.';
   if (!inpEnd.value)                   return 'Pick an end time.';
   if (inpStart.value === inpEnd.value) return 'Start and end times must differ.';
+  if (dataRange) {
+    const s = new Date(inpStart.value), e = new Date(inpEnd.value);
+    const f = d => d.toLocaleDateString('en-NZ', { day: '2-digit', month: 'short', year: 'numeric' });
+    if (s < dataRange.min || s > dataRange.max || e < dataRange.min || e > dataRange.max) {
+      return `Times must fall between ${f(dataRange.min)} and ${f(dataRange.max)} — tidal data isn't available outside this range.`;
+    }
+  }
   if (!inpWindSpeed.value || inpWindDir.value === '') return 'Enter wind speed and direction.';
   if (!selectedObjectIdInput.value)    return 'Select an object type before calculating.';
   return null;

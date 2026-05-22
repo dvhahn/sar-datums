@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from datetime import datetime
 from domain.model import Coordinate, Wind, SearchObject
-from services.drift import calculate_drift, get_currents_grid, get_last_divergence_tracks
+from services.drift import calculate_drift, get_currents_grid, get_last_divergence_tracks, get_tide_data_range
 from services.gpx import generate_gpx, generate_gpx_multi
 from services.kml import generate_kml
 from services.accuracy import parse_gpx_coords, compare_tracks
@@ -143,6 +143,22 @@ def drift():
 
     except (KeyError, ValueError) as e:
         return jsonify({"error": f"Invalid input: {str(e)}"}), 400
+
+    # Reject drift times outside the loaded tidal data window. Without this the
+    # tide lookup silently falls back to zero current (drift._find_bracketing_tides
+    # -> CurrentVector(0, 0)), producing a plausible-looking but invalid drift.
+    tide_min, tide_max = get_tide_data_range(db_target)
+    if tide_min is None or tide_max is None:
+        return jsonify({"error": "No tidal data is loaded for this region."}), 503
+    for label, t in (("Start", start_time), ("End", end_time)):
+        if t < tide_min or t > tide_max:
+            return jsonify({
+                "error": (
+                    f"{label} time is outside the available tidal data range "
+                    f"({tide_min:%d %b %Y} – {tide_max:%d %b %Y}). "
+                    f"Drift cannot be calculated for this period."
+                )
+            }), 400
 
     positions, timestamps = calculate_drift(
         start_pos,
@@ -460,6 +476,23 @@ def accuracy():
     result['database_queried'] = db_target
 
     return jsonify(result)
+
+
+@app.route('/api/data-range')
+def data_range():
+    """Min/max drift times the loaded tidal data can support.
+
+    The frontend uses this to bound the date pickers and reject out-of-range
+    times before submitting. Returned as ISO datetimes (local, no tz suffix).
+    """
+    target = request.args.get('target', DEFAULT_DB_TARGET)
+    tide_min, tide_max = get_tide_data_range(target)
+    if tide_min is None or tide_max is None:
+        return jsonify({"error": "No tidal data is loaded for this region."}), 503
+    return jsonify({
+        "min": tide_min.isoformat(),
+        "max": tide_max.isoformat(),
+    })
 
 
 @app.route('/api/sweep-objects')
