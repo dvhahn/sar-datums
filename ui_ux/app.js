@@ -1861,6 +1861,46 @@ function parseCoord(str, format) {
   return NaN;
 }
 
+// Custom flatpickr parser. Runs in place of flatpickr's built-in text parsing,
+// so it sees the raw string before flatpickr can mis-read it. Handles:
+//   compact all-digits  12 YYYYMMDDHHMM · 8 YYYYMMDD · 4 HHMM (today)
+//   standard            YYYY-MM-DD HH:MM  (the configured dateFormat)
+// Returns a Date, or undefined for anything it can't parse (flatpickr then
+// treats the input as empty/invalid).
+function parseDatetimeEntry(datestr) {
+  const raw = (datestr || '').trim();
+
+  // Compact all-digit shortcuts
+  if (/^\d+$/.test(raw)) {
+    const now = new Date();
+    let y, mo, d, h, mi;
+    if (raw.length === 12) {
+      y = +raw.slice(0, 4); mo = +raw.slice(4, 6) - 1; d = +raw.slice(6, 8);
+      h = +raw.slice(8, 10); mi = +raw.slice(10, 12);
+    } else if (raw.length === 8) {
+      y = +raw.slice(0, 4); mo = +raw.slice(4, 6) - 1; d = +raw.slice(6, 8);
+      h = 0; mi = 0;
+    } else if (raw.length === 4) {
+      y = now.getFullYear(); mo = now.getMonth(); d = now.getDate();
+      h = +raw.slice(0, 2); mi = +raw.slice(2, 4);
+    } else {
+      return undefined;   // ambiguous length
+    }
+    if (mo < 0 || mo > 11 || d < 1 || d > 31 || h > 23 || mi > 59) return undefined;
+    const dt = new Date(y, mo, d, h, mi);
+    return isNaN(dt.getTime()) ? undefined : dt;
+  }
+
+  // Standard "Y-m-d H:i" (also tolerates a T separator and 1-2 digit fields)
+  const m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2})/);
+  if (m) {
+    const dt = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    return isNaN(dt.getTime()) ? undefined : dt;
+  }
+
+  return undefined;
+}
+
 // Preload the CSV-driven object hierarchy so the picker has data when it opens.
 document.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -1875,12 +1915,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // clickOpens (default true) means tapping the field opens the calendar;
     // allowInput lets the user type the datetime directly. No separate button.
+    // A custom parseDate handles compact all-digit entry (e.g. 202605230923)
+    // *before* flatpickr's own parser, so it can't mis-read the digits.
     flatpickr(input, {
       enableTime: true,
       dateFormat: "Y-m-d H:i",
       time_24hr: true,
       minuteIncrement: 1,
-      allowInput: true
+      allowInput: true,
+      parseDate: parseDatetimeEntry
     });
   });
 });
