@@ -611,8 +611,6 @@ fab.addEventListener('pointerup', (e) => {
 
 // ── Calculate
 const btnCalculate = document.getElementById('btnCalculate');
-const inpLat       = document.getElementById('inpLat');
-const inpLon       = document.getElementById('inpLon');
 const inpWindSpeed = document.getElementById('inpWindSpeed');
 const inpWindDir   = document.getElementById('inpWindDir');
 const inpReverse        = document.getElementById('inpReverse');
@@ -803,7 +801,8 @@ document.querySelectorAll('.card-form input, .card-form select')
 // that the backend rejects with 400, which the devtools console then shows
 // in red regardless of how we handle the response.
 function validateDriftForm() {
-  if (!inpLat.value || !inpLon.value) return 'Enter a start position (lat / lon).';
+  if (currentDecimalLat == null || isNaN(currentDecimalLat) ||
+      currentDecimalLon == null || isNaN(currentDecimalLon)) return 'Enter a start position (lat / lon).';
   if (!inpStart.value)                 return 'Pick a start time.';
   if (!inpEnd.value)                   return 'Pick an end time.';
   if (inpStart.value === inpEnd.value) return 'Start and end times must differ.';
@@ -1919,45 +1918,135 @@ inpStart.addEventListener('change', setDefaultUncertainTimes);
 
 setDefaultUncertainTimes();
 
-// Coordinate format switcher (Degrees / DM / DMS) ─────────────────
-const latInput = document.getElementById('inpLat');
-const lonInput = document.getElementById('inpLon');
+// Coordinate format fields (Degrees / DM / DMS) ──────────────────
+// Each format renders its own number cells so the user only ever types
+// numbers — the °, ', " symbols and N/S·E/W direction are UI, not text.
+// currentDecimalLat/Lon stay the single source of truth.
+const latFields = document.getElementById('latFields');
+const lonFields = document.getElementById('lonFields');
 const switcherSegments = document.querySelectorAll('.switcher-segment');
 
 let currentFormat = 'deg';      // 'deg', 'dm', or 'dms'
 let currentDecimalLat = -36.8;
 let currentDecimalLon = 174.8;
 
+// Break a signed decimal into absolute {deg, min, sec} parts for the format.
+function decomposeCoord(decimal, format) {
+  const abs = Math.abs(decimal);
+  if (format === 'deg') return { deg: abs };
+  const deg = Math.floor(abs);
+  if (format === 'dm') return { deg, min: (abs - deg) * 60 };
+  const minFloat = (abs - deg) * 60;
+  const min = Math.floor(minFloat);
+  return { deg, min, sec: (minFloat - min) * 60 };
+}
+
+// One number cell + unit suffix. `decimals` controls display rounding.
+function coordCell(role, value, suffix, decimals) {
+  const wrap = document.createElement('div');
+  wrap.className = 'coord-cell';
+  const inp = document.createElement('input');
+  inp.type = 'number';
+  inp.className = 'coord-seg';
+  inp.dataset.role = role;
+  inp.step = decimals > 0 ? (1 / 10 ** decimals).toString() : '1';
+  inp.value = (value === undefined || value === null || isNaN(value))
+    ? '' : (+value.toFixed(decimals)).toString();
+  inp.addEventListener('input', onCoordInput);
+  wrap.appendChild(inp);
+  if (suffix) {
+    const s = document.createElement('span');
+    s.className = 'coord-unit';
+    s.textContent = suffix;
+    wrap.appendChild(s);
+  }
+  return wrap;
+}
+
+// N/S (lat) or E/W (lon) toggle button.
+function dirToggle(dir, isLat) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'coord-dir';
+  btn.dataset.dir = dir;
+  btn.textContent = dir;
+  btn.addEventListener('click', () => {
+    btn.dataset.dir = isLat
+      ? (btn.dataset.dir === 'N' ? 'S' : 'N')
+      : (btn.dataset.dir === 'E' ? 'W' : 'E');
+    btn.textContent = btn.dataset.dir;
+    onCoordInput();
+  });
+  return btn;
+}
+
+function renderCoordField(container, decimal, isLat) {
+  container.innerHTML = '';
+  if (currentFormat === 'deg') {
+    // Signed decimal in one cell (negative = S/W).
+    container.appendChild(coordCell('deg', decimal, '°', 6));
+    return;
+  }
+  const dir = isLat ? (decimal >= 0 ? 'N' : 'S') : (decimal >= 0 ? 'E' : 'W');
+  const p = decomposeCoord(decimal, currentFormat);
+  container.appendChild(coordCell('deg', p.deg, '°', 0));
+  if (currentFormat === 'dm') {
+    container.appendChild(coordCell('min', p.min, "'", 3));
+  } else {
+    container.appendChild(coordCell('min', p.min, "'", 0));
+    container.appendChild(coordCell('sec', p.sec, '"', 1));
+  }
+  container.appendChild(dirToggle(dir, isLat));
+}
+
+// Re-render both fields from the decimal source of truth. Keeps the name the
+// rest of the app already calls (drag-drop drop handler, format switch).
 function updateInputsFromDecimal() {
-  latInput.value = formatCoord(currentDecimalLat, true, currentFormat);
-  lonInput.value = formatCoord(currentDecimalLon, false, currentFormat);
+  renderCoordField(latFields, currentDecimalLat, true);
+  renderCoordField(lonFields, currentDecimalLon, false);
+}
+
+// Read one field's cells back to a signed decimal, or null if empty/invalid.
+function readCoordField(container, isLat) {
+  const cell = role => {
+    const el = container.querySelector(`[data-role="${role}"]`);
+    return el && el.value !== '' ? parseFloat(el.value) : null;
+  };
+  if (currentFormat === 'deg') {
+    const v = cell('deg');
+    return (v === null || isNaN(v)) ? null : v;
+  }
+  const deg = cell('deg') ?? 0;
+  const min = cell('min') ?? 0;
+  const sec = currentFormat === 'dms' ? (cell('sec') ?? 0) : 0;
+  if (isNaN(deg) || isNaN(min) || isNaN(sec)) return null;
+  const dirBtn = container.querySelector('.coord-dir');
+  const dir = dirBtn ? dirBtn.dataset.dir : (isLat ? 'N' : 'E');
+  let val = Math.abs(deg) + min / 60 + sec / 3600;
+  if (dir === 'S' || dir === 'W') val = -val;
+  return val;
+}
+
+// Sync memory from the cells WITHOUT re-rendering (preserves caret while
+// typing). Keeps the name the rest of the app calls (GetWind, Calculate).
+function onCoordInput() {
+  const newLat = readCoordField(latFields, true);
+  const newLon = readCoordField(lonFields, false);
+  if (newLat !== null) currentDecimalLat = newLat;
+  if (newLon !== null) currentDecimalLon = newLon;
 }
 
 function setFormat(format) {
+  onCoordInput();              // capture latest typed values before switching
   currentFormat = format;
-  switcherSegments.forEach(btn => {
-    if (btn.dataset.format === format) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
-    }
-  });
-  updateInputsFromDecimal();
-}
-
-function onCoordInput() {
-  const newLat = parseCoord(latInput.value, currentFormat);
-  const newLon = parseCoord(lonInput.value, currentFormat);
-  if (!isNaN(newLat)) currentDecimalLat = newLat;
-  if (!isNaN(newLon)) currentDecimalLon = newLon;
-  updateInputsFromDecimal();
+  switcherSegments.forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.format === format));
+  updateInputsFromDecimal();  // re-render cells in the new format
 }
 
 switcherSegments.forEach(btn => {
   btn.addEventListener('click', () => setFormat(btn.dataset.format));
 });
-latInput.addEventListener('blur', onCoordInput);
-lonInput.addEventListener('blur', onCoordInput);
 
 // Initial display
 setFormat('deg');
