@@ -1721,23 +1721,47 @@ body {
   color: var(--color-text);
 }
 
-/* Split coordinate fields (deg / min / sec cells + direction toggle) */
+/* Split coordinate fields — each cell is a pill holding number + unit,
+   sized to its content (deg/min/sec differ) rather than evenly quartered. */
 .coord-fields {
   display: flex;
-  align-items: center;
-  gap: 3px;
+  align-items: stretch;
+  gap: 4px;
 }
 .coord-cell {
   display: flex;
-  align-items: baseline;
-  flex: 1 1 0;
+  align-items: center;
+  flex: 0 1 auto;
   min-width: 0;
+  padding: 0 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+  transition: border-color 0.15s, background 0.15s;
+}
+.coord-cell:focus-within {
+  background: var(--color-bg);
+  border-color: var(--color-accent);
+}
+/* DEG mode: single decimal cell fills the row */
+.coord-cell:only-child {
+  flex: 1 1 auto;
 }
 .coord-fields .coord-seg {
-  width: 100%;
-  min-width: 0;
-  padding: 10px 6px;
-  text-align: center;
+  border: none;
+  background: transparent;
+  padding: 9px 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: right;
+  width: 3.2ch;
+}
+.coord-seg[data-role="min"] { width: 5.2ch; }   /* room for 48.000 (DM) */
+.coord-seg[data-role="sec"] { width: 4ch; }
+.coord-cell:only-child .coord-seg {
+  flex: 1 1 auto;
+  width: auto;
+  text-align: left;
 }
 /* Hide number spinners — they waste width in the narrow cells */
 .coord-seg::-webkit-outer-spin-button,
@@ -1750,23 +1774,25 @@ body {
   appearance: textfield;
 }
 .coord-unit {
-  margin-left: 1px;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--color-text-dim);
+  padding-left: 2px;
+  user-select: none;
 }
 .coord-dir {
   flex: 0 0 auto;
-  padding: 10px 9px;
+  padding: 0 11px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
-  color: #fff;
+  background: transparent;
+  color: var(--color-accent);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
 .coord-dir:hover {
-  opacity: 0.85;
+  background: var(--color-hover);
+  border-color: var(--color-accent);
 }
