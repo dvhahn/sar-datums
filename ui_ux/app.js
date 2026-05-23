@@ -629,8 +629,9 @@ inpMultipleTracks.addEventListener('change', () => {
 
 // ── Get Wind from Open-Meteo
 btnGetWind.addEventListener('click', async () => {
-  const lat = parseFloat(inpLat.value);
-  const lon = parseFloat(inpLon.value);
+  onCoordInput();   // sync memory from inputs first (handles no-blur case)
+  const lat = currentDecimalLat;
+  const lon = currentDecimalLon;
   const time = inpStart.value;
 
   if (!lat || !lon || !time) {
@@ -812,6 +813,7 @@ function validateDriftForm() {
 }
 
 btnCalculate.addEventListener('click', async () => {
+  onCoordInput();   // sync currentDecimalLat/Lon from inputs (handles no-blur case)
   clearError();
 
   const validationError = validateDriftForm();
