@@ -1873,19 +1873,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const input = document.getElementById(id);
     if (!input) return;
 
-    const fp = flatpickr(input, {
+    // clickOpens (default true) means tapping the field opens the calendar;
+    // allowInput lets the user type the datetime directly. No separate button.
+    flatpickr(input, {
       enableTime: true,
       dateFormat: "Y-m-d H:i",
       time_24hr: true,
       minuteIncrement: 1,
       allowInput: true
     });
-
-    // Connect the calendar button to open the picker
-    const button = document.querySelector(`.datetime-button[data-id="${id}"]`);
-    if (button) {
-      button.addEventListener('click', () => fp.open());
-    }
   });
 });
 
