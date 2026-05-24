@@ -1120,6 +1120,66 @@ body {
 }
 
 /* ============================================================
+   Option chips — 2×2 grid of on/off toggles. The checkbox is
+   hidden; :has(:checked) fills the chip. Extra inputs (radius,
+   uncertain LKP) reveal directly below the chips.
+   ============================================================ */
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  flex: 1 1 calc(50% - 3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+  color: var(--color-text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.chip input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+.chip:has(input:checked) {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+.chip input:focus-visible + span {
+  text-decoration: underline;
+}
+
+.chip-extra {
+  margin-top: 10px;
+}
+.chip-extra.hidden {
+  display: none;
+}
+.field-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--color-text-dim);
+  padding-left: 4px;
+}
+
+/* ============================================================
    Form error — inline banner inside the card.
    ============================================================ */
 .form-error {
@@ -1653,4 +1713,142 @@ body {
   font-weight: 600;
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
+}
+
+/* Datetime picker – 24‑hour, glass style */
+.datetime-wrapper {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+}
+.datetime-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+
+
+/* Label row with switcher on the right */
+.form-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.form-label-row .form-label {
+  margin-bottom: 0;
+}
+
+/* Segmented switcher */
+.coord-switcher {
+  display: flex;
+  background: var(--color-hover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.switcher-segment {
+  padding: 4px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.switcher-segment.active {
+  background: var(--color-accent);
+  color: #fff;
+}
+.switcher-segment:not(.active):hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* Split coordinate fields — each cell is a pill holding number + unit,
+   sized to its content (deg/min/sec differ) rather than evenly quartered. */
+.coord-fields {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.coord-cell {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+  transition: border-color 0.15s, background 0.15s;
+}
+.coord-cell:focus-within {
+  background: var(--color-bg);
+  border-color: var(--color-accent);
+}
+/* DEG mode: single decimal cell fills the row */
+.coord-cell:only-child {
+  flex: 1 1 auto;
+}
+.coord-fields .coord-seg {
+  border: none;
+  background: transparent;
+  padding: 9px 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: right;
+  width: 3.2ch;
+}
+.coord-seg[data-role="min"] { width: 5.2ch; }   /* room for 48.000 (DM) */
+.coord-seg[data-role="sec"] { width: 4ch; }
+.coord-cell:only-child .coord-seg {
+  flex: 1 1 auto;
+  width: auto;
+  text-align: left;
+}
+/* Hide number spinners — they waste width in the narrow cells */
+.coord-seg::-webkit-outer-spin-button,
+.coord-seg::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.coord-seg {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.coord-unit {
+  font-size: 13px;
+  color: var(--color-text-dim);
+  padding-left: 2px;
+  user-select: none;
+}
+.coord-dir {
+  flex: 0 0 auto;
+  padding: 0 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.coord-dir:hover {
+  background: var(--color-hover);
+  border-color: var(--color-accent);
 }

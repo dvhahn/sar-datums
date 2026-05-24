@@ -251,7 +251,7 @@ inpEnd.value   = toLocalDatetime(later);
 
 function toLocalDatetime(d) {
   const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // ── Tidal data window ────────────────────────────────────────────────────
@@ -387,8 +387,8 @@ async function fetchDrift(startTime, endTime) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      lat: parseFloat(inpLat.value),
-      lon: parseFloat(inpLon.value),
+      lat: currentDecimalLat,
+      lon: currentDecimalLon,
       start_time: startTime,
       end_time: endTime,
       wind_speed: parseFloat(inpWindSpeed.value),
@@ -398,7 +398,8 @@ async function fetchDrift(startTime, endTime) {
       multiple_tracks: inpMultipleTracks.checked,
       radius_nm: parseFloat(inpRadius.value),
       wind_divergence: chkDivergence.checked,
-      divergence_angle: 30,
+      // No divergence_angle override — backend uses the selected object's
+      // own leeway divergence angle (varies per object, e.g. PIW 30°, kayak 15°).
     }),
   });
   if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
@@ -614,8 +615,9 @@ fab.addEventListener('pointerup', (e) => {
 
   if (droppedOnMap) {
     const lngLat = map.unproject([e.clientX, e.clientY]);
-    inpLat.value = lngLat.lat.toFixed(5);
-    inpLon.value = lngLat.lng.toFixed(5);
+    currentDecimalLat = lngLat.lat;
+    currentDecimalLon = lngLat.lng;
+    updateInputsFromDecimal();
   }
 
   // Reset FAB + anchor visuals
@@ -631,8 +633,6 @@ fab.addEventListener('pointerup', (e) => {
 
 // ── Calculate
 const btnCalculate = document.getElementById('btnCalculate');
-const inpLat       = document.getElementById('inpLat');
-const inpLon       = document.getElementById('inpLon');
 const inpWindSpeed = document.getElementById('inpWindSpeed');
 const inpWindDir   = document.getElementById('inpWindDir');
 const inpReverse        = document.getElementById('inpReverse');
@@ -649,8 +649,9 @@ inpMultipleTracks.addEventListener('change', () => {
 
 // ── Get Wind from Open-Meteo
 btnGetWind.addEventListener('click', async () => {
-  const lat = parseFloat(inpLat.value);
-  const lon = parseFloat(inpLon.value);
+  onCoordInput();   // sync memory from inputs first (handles no-blur case)
+  const lat = currentDecimalLat;
+  const lon = currentDecimalLon;
   const time = inpStart.value;
 
   if (!lat || !lon || !time) {
@@ -822,7 +823,8 @@ document.querySelectorAll('.card-form input, .card-form select')
 // that the backend rejects with 400, which the devtools console then shows
 // in red regardless of how we handle the response.
 function validateDriftForm() {
-  if (!inpLat.value || !inpLon.value) return 'Enter a start position (lat / lon).';
+  if (currentDecimalLat == null || isNaN(currentDecimalLat) ||
+      currentDecimalLon == null || isNaN(currentDecimalLon)) return 'Enter a start position (lat / lon).';
   if (!inpStart.value)                 return 'Pick a start time.';
   if (!inpEnd.value)                   return 'Pick an end time.';
   if (inpStart.value === inpEnd.value) return 'Start and end times must differ.';
@@ -839,6 +841,7 @@ function validateDriftForm() {
 }
 
 btnCalculate.addEventListener('click', async () => {
+  onCoordInput();   // sync currentDecimalLat/Lon from inputs (handles no-blur case)
   clearError();
 
   const validationError = validateDriftForm();
@@ -854,8 +857,8 @@ btnCalculate.addEventListener('click', async () => {
     const isReverse = inpReverse.checked;
     const meta = {
         isReverse: isReverse,
-        startLat: parseFloat(inpLat.value),
-        startLon: parseFloat(inpLon.value),
+        startLat: currentDecimalLat,
+        startLon: currentDecimalLon,
     };
 
 
@@ -873,8 +876,8 @@ btnCalculate.addEventListener('click', async () => {
       ];
       const results = [];
       for (const { value, role } of labels) {
-        let startTime = value + ':00';
-        let endTime   = arrival + ':00';
+        let startTime = value.replace(' ', 'T') + ':00';
+        let endTime   = arrival.replace(' ', 'T') + ':00';
         if (isReverse) {
           [startTime, endTime] = [endTime, startTime];
         }
@@ -901,8 +904,8 @@ btnCalculate.addEventListener('click', async () => {
       });
     } else {
       // Normal single-run mode
-        const earlier = inpStart.value + ':00';
-        const later = inpEnd.value + ':00';
+        const earlier = inpStart.value.replace(' ', 'T') + ':00';
+        const later   = inpEnd.value.replace(' ', 'T') + ':00';
         const startTime = isReverse ? later : earlier;
         const endTime = isReverse ? earlier : later;
         const data = await fetchDrift(startTime, endTime);
@@ -1824,6 +1827,108 @@ function attachPatternToDownloads(container, lines, body) {
   renderPills();
 }
 
+// Convert decimal degrees to DMS string (e.g., -36.8 → "36° 48' 00\" S")
+function decimalToDMS(decimal, isLat) {
+  const dir = isLat ? (decimal >= 0 ? 'N' : 'S') : (decimal >= 0 ? 'E' : 'W');
+  const abs = Math.abs(decimal);
+  const deg = Math.floor(abs);
+  const minFloat = (abs - deg) * 60;
+  const min = Math.floor(minFloat);
+  const sec = ((minFloat - min) * 60).toFixed(2);
+  return `${deg}° ${min}' ${sec}" ${dir}`;
+}
+
+// Convert DMS string to decimal degrees
+function dmsToDecimal(dmsStr) {
+  const parts = dmsStr.match(/(\d+)°\s*(\d+)'?\s*([\d.]+)"?\s*([NSEW])/i);
+  if (!parts) return NaN;
+  const deg = parseInt(parts[1]);
+  const min = parseInt(parts[2]);
+  const sec = parseFloat(parts[3]);
+  const dir = parts[4].toUpperCase();
+  let decimal = deg + min / 60 + sec / 3600;
+  if (dir === 'S' || dir === 'W') decimal = -decimal;
+  return decimal;
+}
+
+// Convert decimal degrees to DM (degrees + decimal minutes) string
+function decimalToDM(decimal, isLat) {
+  const dir = isLat ? (decimal >= 0 ? 'N' : 'S') : (decimal >= 0 ? 'E' : 'W');
+  const abs = Math.abs(decimal);
+  const deg = Math.floor(abs);
+  const min = ((abs - deg) * 60).toFixed(3);
+  return `${deg}° ${min}' ${dir}`;
+}
+
+// Convert DM string (e.g., "36° 48.000' S") to decimal
+function dmToDecimal(dmStr) {
+  const parts = dmStr.match(/(\d+)°\s*([\d.]+)'?\s*([NSEW])/i);
+  if (!parts) return NaN;
+  const deg = parseInt(parts[1]);
+  const min = parseFloat(parts[2]);
+  const dir = parts[3].toUpperCase();
+  let decimal = deg + min / 60;
+  if (dir === 'S' || dir === 'W') decimal = -decimal;
+  return decimal;
+}
+
+// Helper: format decimal according to current format
+function formatCoord(decimal, isLat, format) {
+  if (isNaN(decimal)) return '';
+  if (format === 'deg') return decimal.toFixed(6);
+  if (format === 'dm') return decimalToDM(decimal, isLat);
+  if (format === 'dms') return decimalToDMS(decimal, isLat);
+  return decimal;
+}
+
+// Helper: parse string according to current format
+function parseCoord(str, format) {
+  if (!str) return NaN;
+  if (format === 'deg') return parseFloat(str);
+  if (format === 'dm') return dmToDecimal(str);
+  if (format === 'dms') return dmsToDecimal(str);
+  return NaN;
+}
+
+// Custom flatpickr parser. Runs in place of flatpickr's built-in text parsing,
+// so it sees the raw string before flatpickr can mis-read it. Handles:
+//   compact all-digits  12 YYYYMMDDHHMM · 8 YYYYMMDD · 4 HHMM (today)
+//   standard            YYYY-MM-DD HH:MM  (the configured dateFormat)
+// Returns a Date, or undefined for anything it can't parse (flatpickr then
+// treats the input as empty/invalid).
+function parseDatetimeEntry(datestr) {
+  const raw = (datestr || '').trim();
+
+  // Compact all-digit shortcuts
+  if (/^\d+$/.test(raw)) {
+    const now = new Date();
+    let y, mo, d, h, mi;
+    if (raw.length === 12) {
+      y = +raw.slice(0, 4); mo = +raw.slice(4, 6) - 1; d = +raw.slice(6, 8);
+      h = +raw.slice(8, 10); mi = +raw.slice(10, 12);
+    } else if (raw.length === 8) {
+      y = +raw.slice(0, 4); mo = +raw.slice(4, 6) - 1; d = +raw.slice(6, 8);
+      h = 0; mi = 0;
+    } else if (raw.length === 4) {
+      y = now.getFullYear(); mo = now.getMonth(); d = now.getDate();
+      h = +raw.slice(0, 2); mi = +raw.slice(2, 4);
+    } else {
+      return undefined;   // ambiguous length
+    }
+    if (mo < 0 || mo > 11 || d < 1 || d > 31 || h > 23 || mi > 59) return undefined;
+    const dt = new Date(y, mo, d, h, mi);
+    return isNaN(dt.getTime()) ? undefined : dt;
+  }
+
+  // Standard "Y-m-d H:i" (also tolerates a T separator and 1-2 digit fields)
+  const m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2})/);
+  if (m) {
+    const dt = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    return isNaN(dt.getTime()) ? undefined : dt;
+  }
+
+  return undefined;
+}
 
 // Preload the CSV-driven object hierarchy so the picker has data when it opens.
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1831,6 +1936,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     const res = await fetch('/api/object-hierarchy');
     if (res.ok) fullTree = await res.json();
   } catch (e) { console.error('Preload hierarchy failed', e); }
+
+  const datetimeInputs = ['inpStart', 'inpEnd', 'inpEarliestLKP', 'inpLatestLKP'];
+  datetimeInputs.forEach(id => {
+    const input = document.getElementById(id);
+    if (!input) return;
+
+    // clickOpens (default true) means tapping the field opens the calendar;
+    // allowInput lets the user type the datetime directly. No separate button.
+    // A custom parseDate handles compact all-digit entry (e.g. 202605230923)
+    // *before* flatpickr's own parser, so it can't mis-read the digits.
+    flatpickr(input, {
+      enableTime: true,
+      dateFormat: "Y-m-d H:i",
+      time_24hr: true,
+      minuteIncrement: 1,
+      allowInput: true,
+      parseDate: parseDatetimeEntry
+    });
+  });
 });
 
 const normalStartWrapper = document.getElementById('normalStartWrapper');
@@ -1861,3 +1985,136 @@ chkTimeUncertain.addEventListener('change', () => {
 inpStart.addEventListener('change', setDefaultUncertainTimes);
 
 setDefaultUncertainTimes();
+
+// Coordinate format fields (Degrees / DM / DMS) ──────────────────
+// Each format renders its own number cells so the user only ever types
+// numbers — the °, ', " symbols and N/S·E/W direction are UI, not text.
+// currentDecimalLat/Lon stay the single source of truth.
+const latFields = document.getElementById('latFields');
+const lonFields = document.getElementById('lonFields');
+const switcherSegments = document.querySelectorAll('.switcher-segment');
+
+let currentFormat = 'deg';      // 'deg', 'dm', or 'dms'
+let currentDecimalLat = -36.8;
+let currentDecimalLon = 174.8;
+
+// Break a signed decimal into absolute {deg, min, sec} parts for the format.
+function decomposeCoord(decimal, format) {
+  const abs = Math.abs(decimal);
+  if (format === 'deg') return { deg: abs };
+  const deg = Math.floor(abs);
+  if (format === 'dm') return { deg, min: (abs - deg) * 60 };
+  const minFloat = (abs - deg) * 60;
+  const min = Math.floor(minFloat);
+  return { deg, min, sec: (minFloat - min) * 60 };
+}
+
+// One number cell + unit suffix. `decimals` controls display rounding.
+function coordCell(role, value, suffix, decimals) {
+  const wrap = document.createElement('div');
+  wrap.className = 'coord-cell';
+  const inp = document.createElement('input');
+  inp.type = 'number';
+  inp.className = 'coord-seg';
+  inp.dataset.role = role;
+  inp.step = decimals > 0 ? (1 / 10 ** decimals).toString() : '1';
+  inp.value = (value === undefined || value === null || isNaN(value))
+    ? '' : (+value.toFixed(decimals)).toString();
+  inp.addEventListener('input', onCoordInput);
+  wrap.appendChild(inp);
+  if (suffix) {
+    const s = document.createElement('span');
+    s.className = 'coord-unit';
+    s.textContent = suffix;
+    wrap.appendChild(s);
+  }
+  return wrap;
+}
+
+// N/S (lat) or E/W (lon) toggle button.
+function dirToggle(dir, isLat) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'coord-dir';
+  btn.dataset.dir = dir;
+  btn.textContent = dir;
+  btn.addEventListener('click', () => {
+    btn.dataset.dir = isLat
+      ? (btn.dataset.dir === 'N' ? 'S' : 'N')
+      : (btn.dataset.dir === 'E' ? 'W' : 'E');
+    btn.textContent = btn.dataset.dir;
+    onCoordInput();
+  });
+  return btn;
+}
+
+function renderCoordField(container, decimal, isLat) {
+  container.innerHTML = '';
+  if (currentFormat === 'deg') {
+    // Signed decimal in one cell (negative = S/W).
+    container.appendChild(coordCell('deg', decimal, '°', 6));
+    return;
+  }
+  const dir = isLat ? (decimal >= 0 ? 'N' : 'S') : (decimal >= 0 ? 'E' : 'W');
+  const p = decomposeCoord(decimal, currentFormat);
+  container.appendChild(coordCell('deg', p.deg, '°', 0));
+  if (currentFormat === 'dm') {
+    container.appendChild(coordCell('min', p.min, "'", 3));
+  } else {
+    container.appendChild(coordCell('min', p.min, "'", 0));
+    container.appendChild(coordCell('sec', p.sec, '"', 1));
+  }
+  container.appendChild(dirToggle(dir, isLat));
+}
+
+// Re-render both fields from the decimal source of truth. Keeps the name the
+// rest of the app already calls (drag-drop drop handler, format switch).
+function updateInputsFromDecimal() {
+  renderCoordField(latFields, currentDecimalLat, true);
+  renderCoordField(lonFields, currentDecimalLon, false);
+}
+
+// Read one field's cells back to a signed decimal, or null if empty/invalid.
+function readCoordField(container, isLat) {
+  const cell = role => {
+    const el = container.querySelector(`[data-role="${role}"]`);
+    return el && el.value !== '' ? parseFloat(el.value) : null;
+  };
+  if (currentFormat === 'deg') {
+    const v = cell('deg');
+    return (v === null || isNaN(v)) ? null : v;
+  }
+  const deg = cell('deg') ?? 0;
+  const min = cell('min') ?? 0;
+  const sec = currentFormat === 'dms' ? (cell('sec') ?? 0) : 0;
+  if (isNaN(deg) || isNaN(min) || isNaN(sec)) return null;
+  const dirBtn = container.querySelector('.coord-dir');
+  const dir = dirBtn ? dirBtn.dataset.dir : (isLat ? 'N' : 'E');
+  let val = Math.abs(deg) + min / 60 + sec / 3600;
+  if (dir === 'S' || dir === 'W') val = -val;
+  return val;
+}
+
+// Sync memory from the cells WITHOUT re-rendering (preserves caret while
+// typing). Keeps the name the rest of the app calls (GetWind, Calculate).
+function onCoordInput() {
+  const newLat = readCoordField(latFields, true);
+  const newLon = readCoordField(lonFields, false);
+  if (newLat !== null) currentDecimalLat = newLat;
+  if (newLon !== null) currentDecimalLon = newLon;
+}
+
+function setFormat(format) {
+  onCoordInput();              // capture latest typed values before switching
+  currentFormat = format;
+  switcherSegments.forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.format === format));
+  updateInputsFromDecimal();  // re-render cells in the new format
+}
+
+switcherSegments.forEach(btn => {
+  btn.addEventListener('click', () => setFormat(btn.dataset.format));
+});
+
+// Initial display
+setFormat('deg');
