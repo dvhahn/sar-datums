@@ -377,7 +377,8 @@ async function fetchDrift(startTime, endTime) {
       multiple_tracks: inpMultipleTracks.checked,
       radius_nm: parseFloat(inpRadius.value),
       wind_divergence: chkDivergence.checked,
-      divergence_angle: 30,
+      // No divergence_angle override — backend uses the selected object's
+      // own leeway divergence angle (varies per object, e.g. PIW 30°, kayak 15°).
     }),
   });
   if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
