@@ -67,6 +67,23 @@ def _find_bracketing_tides(cur, current_time: datetime):
     return prev[0], prev[1], nxt[0], nxt[1]
 
 
+def get_tide_data_range(target: str = "local"):
+    """Return (min_time, max_time) of loaded tide_heights data, or (None, None).
+
+    Drift times outside this window make _find_bracketing_tides return None,
+    which falls back to a zero current vector — a plausible-looking but invalid
+    drift. Callers should reject out-of-range times before running the model.
+    """
+    conn = get_connection(target=target)
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT MIN(time), MAX(time) FROM tide_heights")
+        return cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+
 def _get_config(cur):
     """Load reference tidal ranges from config table."""
     cur.execute("SELECT key, value FROM config")
