@@ -12,23 +12,33 @@ PIW Deceased,Person in water,2,0.0231,0,12
 Deceased person in water horizontal,Person in water,2,0.015,0.08,30
 Life Raft,,1,0,0,0
 Life Raft No Ballast,Life Raft,2,0,0,0
-"LifeRaft - No Ballast, No canopy, No drogue",Life Raft No Ballast,3,0.057,0.21,24
-"LifeRaft - No Ballast, No canopy, W/ drogue",Life Raft No Ballast,3,0.044,-0.2,28
-"LifeRaft - No Ballast, Canopy, No drogue",Life Raft No Ballast,3,0.037,0.11,24
-"LifeRaft - No Ballast, Canopy, W/ drogue",Life Raft No Ballast,3,0.03,0,28
+"Life Raft - No Ballast, No canopy, No drogue",Life Raft No Ballast,3,0.057,0.21,24
+"Life Raft - No Ballast, No canopy, W/ drogue",Life Raft No Ballast,3,0.044,-0.2,28
+"Life Raft - No Ballast, Canopy, No drogue",Life Raft No Ballast,3,0.037,0.11,24
+"Life Raft - No Ballast, Canopy, W/ drogue",Life Raft No Ballast,3,0.03,0,28
 Life Raft Shallow Ballast,Life Raft,2,0,0,0
-"LifeRaft - Shallow ballast, canopy, NO drogue",Life Raft Shallow Ballast,3,0.032,-0.02,22
-"LifeRaft - Shallow ballast, canopy, W/ drogue",Life Raft Shallow Ballast,3,0.025,0.01,22
-"LifeRaft - Shallow ballast, canopy, Capsized",Life Raft Shallow Ballast,3,0.017,-0.1,8
-"LifeRaft - Shallow ballast, canopy, 4-14 MAN (Average)",Life Raft Shallow Ballast,3,0.029,0,22
-"LifeRaft - Shallow ballast, canopy, Navy Sub Escape (SEIE) 1-man raft, With Drogue",Life Raft Shallow Ballast,3,0.031,0,13
-"LifeRaft - Shallow ballast, canopy, Navy Sub Escape (SEIE) 1-man raft, NO Drogue",Life Raft Shallow Ballast,3,0.022,0,23
+"Life Raft - Shallow ballast, canopy, NO drogue",Life Raft Shallow Ballast,3,0.032,-0.02,22
+"Life Raft - Shallow ballast, canopy, W/ drogue",Life Raft Shallow Ballast,3,0.025,0.01,22
+"Life Raft - Shallow ballast, canopy, Capsized",Life Raft Shallow Ballast,3,0.017,-0.1,8
+"Life Raft - Shallow ballast, canopy, 4-14 MAN (Average)",Life Raft Shallow Ballast,3,0.029,0,22
+"Life Raft - Shallow ballast, canopy, Navy Sub Escape (SEIE) 1-man raft, With Drogue",Life Raft Shallow Ballast,3,0.031,0,13
+"Life Raft - Shallow ballast, canopy, Navy Sub Escape (SEIE) 1-man raft, NO Drogue",Life Raft Shallow Ballast,3,0.022,0,23
 Life Raft Deep Ballast,Life Raft,2,0,0,0
-"LifeRaft - Deep Ballast System and Canopy (Average)",Life Raft Deep Ballast,3,0.03,0.02,13
-"LifeRaft - Deep Ballast, 4-14 MAN",Life Raft Deep Ballast,3,0.029,0.04,15
-"LifeRaft - Deep Ballast, 15-50 MAN",Life Raft Deep Ballast,3,0.036,-0.09,10
-"LifeRaft - Deep Ballast System and Canopy - CAPSIZED",Life Raft Deep Ballast,3,0.009,0,12
-"LifeRaft - Deep Ballast System and Canopy - SWAMPED",Life Raft Deep Ballast,3,0.01,-0.04,8
+"Life Raft - Deep Ballast System and Canopy (Average)",Life Raft Deep Ballast,3,0.03,0.02,13
+"Life Raft - Deep Ballast, 4-14 MAN",Life Raft Deep Ballast,3,0,0,0
+"Life Raft - Deep Ballast, Canopy, 4-14 MAN (Average)","Life Raft - Deep Ballast, 4-14 MAN",4,0.029,0.04,15
+"Life Raft - Deep Ballast, Canopy, 4-14 man, w/o drogue (Average)","Life Raft - Deep Ballast, 4-14 MAN",4,0.038,-0.04,15
+"Life Raft - Deep Ballast, Canopy, 4-14 man, w/o drogue, light load","Life Raft - Deep Ballast, 4-14 MAN",4,0.038,-0.04,15
+"Life Raft - Deep Ballast, Canopy, 4-14 man, w/o drogue, hvy load","Life Raft - Deep Ballast, 4-14 MAN",4,0.036,-0.03,15
+"Life Raft - Deep Ballast, Canopy, 4-14 man, w/drogue (Average)","Life Raft - Deep Ballast, 4-14 MAN",4,0.018,0.03,12
+"Life Raft - Deep Ballast, Canopy, 4-14 man, w/drogue, light load","Life Raft - Deep Ballast, 4-14 MAN",4,0.016,0.05,24
+"Life Raft - Deep Ballast, Canopy, 4-14 man, w/drogue, hvy load","Life Raft - Deep Ballast, 4-14 MAN",4,0.021,0,20
+"Life Raft - Deep Ballast, 15-50 MAN",Life Raft Deep Ballast,3,0,0,0
+"Life Raft - Deep Ballast, Canopy, 15-50 MAN (Average)","Life Raft - Deep Ballast, 15-50 MAN",4,0.036,-0.09,10
+"Life Raft - Deep Ballast, Canopy, 15-50 man, w/o drogue, light load","Life Raft - Deep Ballast, 15-50 MAN",4,0.039,-0.06,9
+"Life Raft - Deep Ballast, Canopy, 15-50 man, w/ drogue, hvy load","Life Raft - Deep Ballast, 15-50 MAN",4,0.031,-0.07,9
+"Life Raft - Deep Ballast System and Canopy - CAPSIZED",Life Raft Deep Ballast,3,0.009,0,12
+"Life Raft - Deep Ballast System and Canopy - SWAMPED",Life Raft Deep Ballast,3,0.01,-0.04,8
 Survival Craft,,1,0,0,0
 "Survival Craft - SOLAS Hard Shell Life Capsule, 22 man",Survival Craft,2,0.038,-0.08,22
 "Survival Craft - Ovatek Hard Shell Life Raft, 4 and 7 man, lightly loaded, no drogue",Survival Craft,2,0.041,0,17
@@ -98,18 +108,18 @@ Immigration vessels,,1,0,0,0
 Other Targets,,1,0,0,0
 Boating Debris,Other Targets,2,0,0,0
 "Boating Debris - F/V debris",Boating Debris,3,0.02,0,10
-"Bait/wharf Box holds 1 cubic meter of ice (Average)",Other Targets,2,0.013,0.27,31
-"Bait/wharf Box - Lightly loaded","Bait/wharf Box holds 1 cubic meter of ice (Average)",3,0.026,0.18,15
-"Bait/wharf Box - Heavily loaded","Bait/wharf Box holds 1 cubic meter of ice (Average)",3,0.016,0.16,33
+"Bait/wharf Box holds 1 cubic meter of ice (Average)",Boating Debris,3,0.013,0.27,31
+"Bait/wharf Box - Lightly loaded",Boating Debris,3,0.026,0.18,15
+"Bait/wharf Box - Heavily loaded",Boating Debris,3,0.016,0.16,33
 Sewage/Medical Waste,Other Targets,2,0,0,0
 Sewage Floatables,Sewage/Medical Waste,3,0.018,0,5
 MEDICAL WASTE (Average),Sewage/Medical Waste,3,0.028,0,10
-Vials (Average),MEDICAL WASTE (Average),3,0.037,0,10
-Vials - Large,Vials (Average),3,0.044,0,10
-Vials - Small,Vials (Average),3,0.03,0,10
-Syringes (Average),MEDICAL WASTE (Average),3,0.018,0,5
-Syringes - Large,Syringes (Average),3,0.018,0,5
-Syringes - Small,Syringes (Average),3,0.018,0,5
+Vials (Average),Sewage/Medical Waste,3,0.037,0,10
+Vials - Large,Sewage/Medical Waste,3,0.044,0,10
+Vials - Small,Sewage/Medical Waste,3,0.03,0,10
+Syringes (Average),Sewage/Medical Waste,3,0.018,0,5
+Syringes - Large,Sewage/Medical Waste,3,0.018,0,5
+Syringes - Small,Sewage/Medical Waste,3,0.018,0,5
 Bale of Cocaine,Other Targets,2,0.018,0,39
 55-gallon Oil Drum,Other Targets,2,0.014,0,39
 20-ft Shipping Container (80% submerged),Other Targets,2,0.0183,0,11
