@@ -74,9 +74,18 @@ themeToggle.addEventListener('click', () => {
 function applyTheme(theme) {
   document.body.dataset.theme = theme;
   const newStyle = theme === 'dark' ? MAP_STYLE_DARK : MAP_STYLE_LIGHT;
-  map.setStyle(newStyle);
-  // After style change, re-draw all runs (map loses custom layers on setStyle).
-  map.once('styledata', redrawAllRuns);
+
+  // diff:false forces a full style reload so 'style.load' actually fires — with
+  // the default diff, MapLibre patches the style and never emits style.load,
+  // so our custom layers were wiped and never re-added.
+  map.setStyle(newStyle, { diff: false });
+
+  // Re-draw all runs once the new style is ready. Guarded so whichever of
+  // style.load / idle lands first wins (and we never redraw twice).
+  let done = false;
+  const redrawOnce = () => { if (done) return; done = true; redrawAllRuns(); };
+  map.once('style.load', redrawOnce);
+  map.once('idle', redrawOnce);   // fallback if style.load is skipped
 }
 
 
@@ -1157,6 +1166,7 @@ function removeRun(id) {
   }
 
   runs = runs.filter(r => r.id !== id);
+  if (id === activePatternContainerId) activePatternContainerId = null;
   renderPills();
 
   if (runs.length === 0) openCard();
@@ -1381,9 +1391,20 @@ function redrawAllRuns() {
     } else {
       run.markers?.forEach(m => m.remove());
       drawRun(run);
-      if (run.patternLines?.length) drawPatternForRun(run, run.patternLines);
     }
   });
+  redrawActivePattern();   // single live pattern — normal run OR pair child
+}
+
+// Re-add the one live search pattern after a style reload, wherever it lives
+// (a normal run's patternLines, or an uncertainty pair's earliest/latest).
+function redrawActivePattern() {
+  for (const run of runs) {
+    const holders = run.isUncertaintyPair ? [run.earliest, run.latest] : [run];
+    for (const h of holders) {
+      if (h && h.patternLines?.length) { drawPatternForRun(h, h.patternLines); return; }
+    }
+  }
 }
 
 function fitToRun(run) {
@@ -1425,6 +1446,8 @@ function buildPill(run) {
 
   const pill = document.createElement('div');
   pill.className = 'result-pill';
+  const patternOn = run.id === activePatternContainerId;
+  if (patternOn) pill.classList.add('pattern-active');
   pill.innerHTML = `
     <div class="pill-dot" style="background:${run.color}"></div>
     <div class="pill-coord">${last.lat.toFixed(5)}°, ${last.lon.toFixed(5)}°</div>
@@ -1433,7 +1456,7 @@ function buildPill(run) {
       <span>${s.drift_bearing_deg}°</span>
     </div>
     <div class="pill-actions">
-      <button class="pill-btn pattern" aria-label="Search pattern">Pattern</button>
+      <button class="pill-btn pattern${patternOn ? ' on' : ''}" aria-label="Search pattern">Pattern</button>
       <a class="pill-btn" href="${run.gpxUrl}" download="drift-${run.id}.gpx">GPX</a>
       <a class="pill-btn" href="${run.kmlUrl}" download="drift-${run.id}.kml">KML</a>
       <button class="pill-btn remove" aria-label="Remove">×</button>
@@ -1479,6 +1502,8 @@ function buildUncertaintyPill(pair) {
   `;
   const pill = document.createElement('div');
   pill.className = 'result-pill result-pill--uncertain';
+  const patternOn = pair.id === activePatternContainerId;
+  if (patternOn) pill.classList.add('pattern-active');
   pill.innerHTML = `
     <div class="pill-uncertain-header">
       <span class="pill-uncertain-tag">
@@ -1491,7 +1516,7 @@ function buildUncertaintyPill(pair) {
       ${row(pair.latest.color,   lLast, lS, 'latest')}
     </div>
     <div class="pill-actions">
-      <button class="pill-btn pattern" aria-label="Search pattern">Pattern</button>
+      <button class="pill-btn pattern${patternOn ? ' on' : ''}" aria-label="Search pattern">Pattern</button>
       <a class="pill-btn" href="${pair.gpxUrl}" download="drift-${pair.id}-uncertain.gpx">GPX</a>
       <a class="pill-btn" href="${pair.kmlUrl}" download="drift-${pair.id}-uncertain.kml">KML</a>
       <button class="pill-btn remove" aria-label="Remove">×</button>
@@ -1569,9 +1594,14 @@ const patSectorSection  = document.getElementById('patSectorSection');
 
 // Search-pattern lines render in a contrasting hue from the drift track so
 // the two layers read as distinct concepts.
-const PATTERN_COLOR = '#0066FF';
+// Pattern colour — change PATTERN_RGB only and the line, glow and pulse all
+// follow. (kept separate from the per-run drift colours so the search pattern
+// always reads as its own thing.)
+const PATTERN_RGB   = '255,140,72';   // warm orange (Claude-ish) — change to reskin
+const PATTERN_COLOR = `rgb(${PATTERN_RGB})`;
 
 let activePatternRun = null;  // which run the dialog is generating for
+let activePatternContainerId = null;  // top-level run/pair whose pattern is live
 
 function openPatternCard(run) {
   activePatternRun = run;
@@ -1654,13 +1684,18 @@ btnGeneratePattern.addEventListener('click', async () => {
 
     if (activePatternRun) {
       drawPatternForRun(activePatternRun, data.lines);
+      sonarPing([body.datum_lon, body.datum_lat]);  // ping the datum
       // For an uncertainty pair the pattern dialog targets pair.earliest,
       // but the GPX/KML download lives on the pair itself. Walk up to the
       // owning container so we update the correct download URLs.
       const container = activePatternRun.parentId
         ? runs.find(r => r.id === activePatternRun.parentId)
         : activePatternRun;
-      if (container) attachPatternToDownloads(container, data.lines, body);
+      if (container) {
+        attachPatternToDownloads(container, data.lines, body);
+        activePatternContainerId = container.id;  // highlight this pill
+        renderPills();
+      }
     }
 
     closePatternCard();
@@ -1761,14 +1796,76 @@ btnApplySweep.addEventListener('click', () => {
   }
 });
 
-// Draws the pattern as a dashed line layer on top of the drift track. Stored
+// ── Pattern motion ───────────────────────────────────────────────────────
+// Two things animate on the live pattern: an ambient halo that softly
+// "breathes" (organic, layered sines so it feels random, not metronomic), and
+// a short bright swell that glides along the line like water bunched in a hose.
+let animHaloId = null, animSwellId = null, animT0 = 0;
+
+// Smooth short swell centred at c (0..1): transparent -> bright -> transparent.
+function buildPulseGradient(c) {
+  const w = 0.075;                      // half-length of the swell (short bulge)
+  const col = a => `rgba(${PATTERN_RGB},${a})`;
+  const pts = [
+    [0, col(0)], [c - w, col(0)],
+    [c - w * 0.5, col(0.12)], [c - w * 0.2, col(0.6)],
+    [c, col(0.95)],
+    [c + w * 0.2, col(0.6)], [c + w * 0.5, col(0.12)],
+    [c + w, col(0)], [1, col(0)],
+  ];
+  const out = ['interpolate', ['linear'], ['line-progress']];
+  let last = -1;
+  for (let [x, color] of pts) {
+    x = Math.max(0, Math.min(1, x));
+    if (x > last + 0.0006) { out.push(x, color); last = x; }
+  }
+  return out;
+}
+
+function patternAnimLoop(now) {
+  const t = (now - animT0) / 1000;
+  if (animHaloId && map.getLayer(animHaloId)) {
+    // Layered sines → an organic, non-repeating breathe between ~0.10 and ~0.34.
+    const w1 = Math.sin(t * 1.05), w2 = Math.sin(t * 0.43 + 1.7), w3 = Math.sin(t * 2.3 + 0.6);
+    const breathe = 0.22 + 0.12 * (0.55 * w1 + 0.30 * w2 + 0.15 * w3);
+    try { map.setPaintProperty(animHaloId, 'line-opacity', Math.max(0.06, breathe)); } catch (e) {}
+  }
+  if (animSwellId && map.getLayer(animSwellId)) {
+    const PERIOD = 6800;                 // ms per lap — slow glide
+    const c = (now % PERIOD) / PERIOD;
+    try { map.setPaintProperty(animSwellId, 'line-gradient', buildPulseGradient(c)); } catch (e) {}
+  }
+  requestAnimationFrame(patternAnimLoop);
+}
+requestAnimationFrame(patternAnimLoop);
+
+// Sonar ping: one quiet ring breathes out from the datum when a pattern is
+// placed — a soft "set here" confirmation, then gone.
+function sonarPing(lngLat) {
+  const el = document.createElement('div');
+  el.className = 'sonar-ping';
+  el.innerHTML = '<span></span>';
+  const marker = new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
+  setTimeout(() => marker.remove(), 1100);
+}
+
+// Draws the pattern as a static neon line (halo + bloom + crisp core). Stored
 // against the run so removeRun() can clean it up.
 function drawPatternForRun(run, lines) {
+  // Single active pattern: clear every other run's pattern (and its stored
+  // lines, so a map-style reload can't redraw stale ones) — the map shows
+  // exactly one search pattern at a time.
+  runs.forEach(r => {
+    [r, r.earliest, r.latest].forEach(x => {
+      if (x && x !== run) { removePatternForRun(x); x.patternLines = null; }
+    });
+  });
   removePatternForRun(run);
   run.patternLines = lines;
 
   const sourceId = `run-${run.id}-pattern`;
-  const layerId  = sourceId;
+  const haloId   = `${sourceId}-halo`;
+  const swellId  = `${sourceId}-swell`;
 
   const features = lines
     .filter(line => line && line.length >= 2)
@@ -1782,29 +1879,47 @@ function drawPatternForRun(run, lines) {
 
   if (features.length === 0) return;
 
+  // lineMetrics enables line-progress, which the travelling swell rides on.
   map.addSource(sourceId, {
     type: 'geojson',
+    lineMetrics: true,
     data: { type: 'FeatureCollection', features },
   });
+
+  const flat = ['interpolate', ['linear'], ['line-progress'], 0, `rgba(${PATTERN_RGB},0)`, 1, `rgba(${PATTERN_RGB},0)`];
+
+  // Ambient halo — wide, soft, breathing opacity (set by patternAnimLoop).
   map.addLayer({
-    id: layerId,
-    type: 'line',
-    source: sourceId,
-    paint: {
-      'line-color': PATTERN_COLOR,
-      'line-width': 2,
-      'line-dasharray': [3, 2],
-      'line-opacity': 0.85,
-    },
+    id: haloId, type: 'line', source: sourceId,
+    paint: { 'line-color': PATTERN_COLOR, 'line-width': 16, 'line-blur': 10, 'line-opacity': 0.2 },
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+  });
+  // Base — thin steady thread so the shape always reads.
+  map.addLayer({
+    id: sourceId, type: 'line', source: sourceId,
+    paint: { 'line-color': PATTERN_COLOR, 'line-width': 1.4, 'line-opacity': 0.5 },
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+  });
+  // Swell — short bright bump that glides along (gradient set each frame).
+  map.addLayer({
+    id: swellId, type: 'line', source: sourceId,
+    paint: { 'line-width': 3.5, 'line-blur': 1.2, 'line-gradient': flat },
     layout: { 'line-cap': 'round', 'line-join': 'round' },
   });
 
-  run.patternLayers = [layerId];
+  run.patternLayers = [haloId, sourceId, swellId];
   run.patternSources = [sourceId];
+  animHaloId = haloId;
+  animSwellId = swellId;
+  animT0 = performance.now();
 }
 
 function removePatternForRun(run) {
-  run.patternLayers?.forEach(id => { if (map.getLayer(id))  map.removeLayer(id); });
+  run.patternLayers?.forEach(id => {
+    if (id === animHaloId)  animHaloId = null;
+    if (id === animSwellId) animSwellId = null;
+    if (map.getLayer(id))   map.removeLayer(id);
+  });
   run.patternSources?.forEach(id => { if (map.getSource(id)) map.removeSource(id); });
   run.patternLayers = [];
   run.patternSources = [];
