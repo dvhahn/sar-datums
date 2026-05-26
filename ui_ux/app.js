@@ -2147,7 +2147,7 @@ windModeSwitch.querySelectorAll('.switcher-segment').forEach(btn => {
       b.classList.toggle('active', b.dataset.windmode === windMode));
     windSingle.classList.toggle('hidden', windMode !== 'single');
     windSeriesPane.classList.toggle('hidden', windMode !== 'series');
-    if (windMode === 'series' && windRows.children.length === 0) addWindRow();
+    if (windMode === 'series') updateWindCount();
   });
 });
 
@@ -2164,10 +2164,53 @@ function addWindRow(time = '', dir = '', spd = '') {
 }
 btnAddWindRow.addEventListener('click', () => addWindRow());
 
+// ── Wind series modal (open / save / cancel) ─────────────────────────────
+// The table lives in this modal. Edits are "live" in the DOM, so to honour
+// "only Save applies" we snapshot row values on open and restore them on
+// Cancel. collectWindSeries() reads #windRows regardless of modal state.
+const windCardWrap = document.getElementById('windCardWrap');
+const btnOpenWindModal = document.getElementById('btnOpenWindModal');
+const windSeriesCount = document.getElementById('windSeriesCount');
+const btnSaveWind = document.getElementById('btnSaveWind');
+let windSnapshot = [];
+
+function readWindRows() {
+  return [...windRows.querySelectorAll('.wind-row')].map(r => ({
+    t: r.querySelector('.wind-time').value,
+    d: r.querySelector('.wind-dir').value,
+    s: r.querySelector('.wind-spd').value,
+  }));
+}
+function writeWindRows(rows) {
+  windRows.innerHTML = '';
+  rows.forEach(r => addWindRow(r.t, r.d, r.s));
+}
+function updateWindCount() {
+  const n = readWindRows().filter(r => r.t.trim() || r.d.trim() || r.s.trim()).length;
+  windSeriesCount.textContent = n ? `${n} point${n > 1 ? 's' : ''}` : 'empty';
+}
+function openWindModal() {
+  windSnapshot = readWindRows();                 // for Cancel
+  if (windRows.children.length === 0) addWindRow();
+  windCardWrap.classList.remove('hidden');
+}
+function closeWindModal(apply) {
+  if (!apply) writeWindRows(windSnapshot);       // discard edits
+  // reset the import sub-panel
+  windImportText.value = '';
+  windPreview.classList.add('hidden');
+  btnParseWind.classList.add('hidden');
+  windImportError.classList.add('hidden');
+  windCardWrap.classList.add('hidden');
+  updateWindCount();
+}
+btnOpenWindModal.addEventListener('click', openWindModal);
+btnSaveWind.addEventListener('click', () => closeWindModal(true));
+windCardWrap.querySelectorAll('[data-windclose]').forEach(el =>
+  el.addEventListener('click', () => closeWindModal(false)));
+
 // ── Wind import (paste from Excel/CSV) + clear ───────────────────────────
-const btnImportWind = document.getElementById('btnImportWind');
 const btnClearWind = document.getElementById('btnClearWind');
-const windImportPane = document.getElementById('windImportPane');
 const windImportText = document.getElementById('windImportText');
 const btnParseWind = document.getElementById('btnParseWind');
 const windImportError = document.getElementById('windImportError');
@@ -2177,37 +2220,193 @@ const COMPASS_DEG = {
   S: 180, SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5,
 };
 
-btnImportWind.addEventListener('click', () => windImportPane.classList.toggle('hidden'));
-btnClearWind.addEventListener('click', () => { windRows.innerHTML = ''; });
+const windPreview = document.getElementById('windPreview');
+const windUnitToggle = document.getElementById('windUnitToggle');
 
-// Parse pasted rows ("time, dir, speed" — tab or comma separated, like an
-// Excel copy or CSV). Header/blank lines and 4th+ columns are ignored;
-// compass points (NE, SSW…) convert to degrees. Replaces the table.
+// Speed unit → divisor to convert into knots (mirrors Excel DownLoadWind Cv).
+const UNIT_TO_KT = { kt: 1, kmh: 1.852, mph: 1.15078 };
+let windUnit = 'kt';
+
+btnClearWind.addEventListener('click', () => { windRows.innerHTML = ''; updateWindCount(); });
+
+windUnitToggle.querySelectorAll('.unit-seg').forEach(seg => {
+  seg.addEventListener('click', () => {
+    windUnit = seg.dataset.unit;
+    windUnitToggle.querySelectorAll('.unit-seg').forEach(s =>
+      s.classList.toggle('active', s.dataset.unit === windUnit));
+  });
+});
+
+// ── Smart paste import ───────────────────────────────────────────────────
+// Paste a block → split into a grid → guess which column is time / direction
+// / speed → show a preview where each column header is a role dropdown the
+// user can override. No cell coordinates to type (unlike Excel's form).
+
+function splitImportGrid(text) {
+  // Rows of cells. Prefer tab (Excel copy); fall back to comma; then runs of
+  // 2+ spaces so "2026-02-14 06:00   67.5   18" stays 3 cells, not 4.
+  return text.split(/\r?\n/)
+    .map(l => l.trimEnd())
+    .filter(l => l.trim() !== '')
+    .map(l => {
+      if (l.includes('\t')) return l.split('\t').map(c => c.trim());
+      if (l.includes(',')) return l.split(',').map(c => c.trim());
+      // Prefer runs of 2+ spaces (keeps "2026-02-14 06:00" as one cell); but
+      // if that leaves a single cell, the data is single-space separated.
+      const wide = l.split(/\s{2,}/).map(c => c.trim());
+      return wide.length > 1 ? wide : l.split(/\s+/).map(c => c.trim());
+    });
+}
+
+function looksLikeTime(v) { return !!parseDatetimeEntry(v); }
+function looksLikeDir(v) {
+  if (v.toUpperCase() in COMPASS_DEG) return true;
+  const n = parseFloat(v);
+  return !isNaN(n) && n >= 0 && n <= 360 && /^[\d.]+$/.test(v.replace('-', ''));
+}
+function looksLikeSpeed(v) {
+  const n = parseFloat(v);
+  return !isNaN(n) && n >= 0 && n <= 250 && /^[\d.]+$/.test(v.replace('-', ''));
+}
+
+// Score each column for each role and assign greedily (time → dir → speed).
+function detectRoles(grid) {
+  const cols = Math.max(...grid.map(r => r.length));
+  const score = { time: [], dir: [], speed: [] };
+  for (let c = 0; c < cols; c++) {
+    let t = 0, d = 0, s = 0, n = 0;
+    for (const row of grid) {
+      const cell = (row[c] || '').trim();
+      if (!cell) continue;
+      n++;
+      if (looksLikeTime(cell)) t++;
+      if (looksLikeDir(cell)) d++;
+      if (looksLikeSpeed(cell)) s++;
+    }
+    score.time[c] = n ? t / n : 0;
+    score.dir[c] = n ? d / n : 0;
+    score.speed[c] = n ? s / n : 0;
+  }
+  const roles = new Array(cols).fill('ignore');
+  const taken = new Set();
+  for (const role of ['time', 'dir', 'speed']) {
+    let best = -1, bestScore = 0.5; // need a majority to auto-pick
+    for (let c = 0; c < cols; c++) {
+      if (taken.has(c)) continue;
+      if (score[role][c] > bestScore) { bestScore = score[role][c]; best = c; }
+    }
+    if (best >= 0) { roles[best] = role; taken.add(best); }
+  }
+  return roles;
+}
+
+let importGrid = [];
+let importRoles = [];
+
+// Re-split + re-detect on a fresh paste, then render.
+function onImportInput() {
+  importGrid = splitImportGrid(windImportText.value);
+  if (importGrid.length === 0) {
+    importRoles = [];
+    windPreview.classList.add('hidden');
+    btnParseWind.classList.add('hidden');
+    windImportError.classList.add('hidden');
+    return;
+  }
+  importRoles = detectRoles(importGrid);
+  renderImportPreview();
+}
+
+// Render the preview grid from importGrid + importRoles (no re-detection, so a
+// manual dropdown override survives).
+function renderImportPreview() {
+  windImportError.classList.add('hidden');
+  const cols = importGrid.length ? Math.max(...importGrid.map(r => r.length)) : 0;
+  const ROLE_OPTS = [['time', 'Time'], ['dir', 'Dir °'], ['speed', 'Speed'], ['ignore', '—']];
+
+  let html = '<div class="wind-preview-grid" style="grid-template-columns:repeat(' + cols + ',1fr)">';
+  for (let c = 0; c < cols; c++) {
+    html += '<select class="wind-role" data-col="' + c + '">' +
+      ROLE_OPTS.map(([v, lbl]) =>
+        `<option value="${v}"${importRoles[c] === v ? ' selected' : ''}>${lbl}</option>`).join('') +
+      '</select>';
+  }
+  const sample = importGrid.slice(0, 6);
+  for (const row of sample) {
+    for (let c = 0; c < cols; c++) {
+      const cell = (row[c] || '').trim();
+      const cls = importRoles[c] === 'ignore' ? ' class="dim"' : '';
+      html += `<div${cls}>${cell.replace(/</g, '&lt;') || '·'}</div>`;
+    }
+  }
+  html += '</div>';
+  if (importGrid.length > sample.length) {
+    html += `<div class="wind-preview-more">+ ${importGrid.length - sample.length} more row(s)</div>`;
+  }
+  windPreview.innerHTML = html;
+  windPreview.classList.remove('hidden');
+
+  windPreview.querySelectorAll('.wind-role').forEach(sel => {
+    sel.addEventListener('change', () => {
+      importRoles[parseInt(sel.dataset.col, 10)] = sel.value;
+      renderImportPreview();   // cheap; keeps importRoles, just refreshes dim
+    });
+  });
+
+  btnParseWind.classList.remove('hidden');
+}
+
+windImportText.addEventListener('input', onImportInput);
+
+// Build rows from the mapped columns and append them to the table.
 btnParseWind.addEventListener('click', () => {
   windImportError.classList.add('hidden');
-  const lines = windImportText.value.split(/\r?\n/);
+  const ti = importRoles.indexOf('time');
+  const di = importRoles.indexOf('dir');
+  const si = importRoles.indexOf('speed');
+  if (ti < 0 || di < 0 || si < 0) {
+    windImportError.textContent = 'Map a Time, a Dir, and a Speed column first.';
+    windImportError.classList.remove('hidden');
+    return;
+  }
+
+  const divisor = UNIT_TO_KT[windUnit] || 1;
   const parsed = [];
-  for (const line of lines) {
-    const parts = line.split(/[,\t]/).map(s => s.trim());
-    if (parts.length < 3) continue;
-    const [traw, draw, sraw] = parts;
-    if (!parseDatetimeEntry(traw)) continue;          // skip header/garbage
+  for (const row of importGrid) {
+    const traw = (row[ti] || '').trim();
+    const draw = (row[di] || '').trim();
+    const sraw = (row[si] || '').trim();
+    if (!looksLikeTime(traw)) continue;                 // skips header/garbage
     const dir = (draw.toUpperCase() in COMPASS_DEG)
       ? COMPASS_DEG[draw.toUpperCase()]
       : parseFloat(draw);
     const spd = parseFloat(sraw);
     if (isNaN(dir) || isNaN(spd)) continue;
-    parsed.push([traw, dir, spd]);
+    parsed.push([traw, dir, Math.round((spd / divisor) * 10) / 10]);
   }
+
   if (parsed.length === 0) {
-    windImportError.textContent = 'No valid rows found. Expected: time, direction, speed (one per line).';
+    windImportError.textContent = 'No valid rows found with the current column mapping.';
     windImportError.classList.remove('hidden');
     return;
   }
-  windRows.innerHTML = '';
+
+  // Drop any empty placeholder rows, then append the imported rows.
+  windRows.querySelectorAll('.wind-row').forEach(r => {
+    const t = r.querySelector('.wind-time').value.trim();
+    const d = r.querySelector('.wind-dir').value.trim();
+    const s = r.querySelector('.wind-spd').value.trim();
+    if (!t && !d && !s) r.remove();
+  });
   parsed.forEach(([t, d, s]) => addWindRow(t, d, s));
-  windImportPane.classList.add('hidden');
+
+  // Keep the modal open so the user can keep editing; just reset the importer.
+  windPreview.classList.add('hidden');
+  btnParseWind.classList.add('hidden');
   windImportText.value = '';
+  importGrid = [];
+  importRoles = [];
+  updateWindCount();
 });
 
 // Collect series rows → [{time, direction_deg, speed}]. Reuses the datetime

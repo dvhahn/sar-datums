@@ -1185,8 +1185,8 @@ body {
 .wind-table-head,
 .wind-row {
   display: grid;
-  grid-template-columns: 1fr 0.65fr 0.65fr 28px;
-  gap: 6px;
+  grid-template-columns: 1.25fr 0.7fr 0.7fr 22px;
+  gap: 5px;
   align-items: center;
 }
 .wind-table-head {
@@ -1269,8 +1269,150 @@ body {
 }
 #btnParseWind {
   width: 100%;
-  margin-top: 6px;
+  margin-top: 8px;
 }
+
+/* Import: speed-unit toggle row */
+.wind-import-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.wind-import-label {
+  font-size: 11px;
+  color: var(--color-text-dim);
+}
+.unit-toggle {
+  display: flex;
+  background: var(--color-hover);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.unit-seg {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.unit-seg.active {
+  background: var(--color-accent);
+  color: #fff;
+}
+.unit-seg:not(.active):hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* Import: live preview grid with per-column role dropdowns */
+.wind-preview {
+  margin-top: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 6px;
+  background: var(--color-hover);
+  overflow-x: auto;
+}
+.wind-preview-grid {
+  display: grid;
+  gap: 3px 6px;
+  min-width: max-content;
+}
+.wind-preview-grid > div {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text);
+  white-space: nowrap;
+  padding: 1px 2px;
+}
+.wind-preview-grid > div.dim {
+  color: var(--color-text-dim);
+  opacity: 0.45;
+}
+.wind-role {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-accent);
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+.wind-preview-more {
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--color-text-dim);
+  text-align: center;
+}
+
+/* ── Series mode: opener button + count summary ── */
+.wind-series-open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.wind-series-open:hover {
+  background: var(--color-surface);
+  border-color: var(--color-accent);
+}
+.wind-series-open svg { color: var(--color-accent); flex-shrink: 0; }
+.wind-series-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-dim);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+}
+
+/* ── Wind modal specifics ── */
+.card--wide { width: 540px; }
+.wind-rows-scroll {
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 2px 0 8px;
+  padding-right: 2px;
+}
+.wind-addrow { width: 100%; }
+.wind-clear-link {
+  border: none;
+  background: transparent;
+  color: var(--color-text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.wind-clear-link:hover { color: #ff453a; }
+.card-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+.card-footer .btn-outline,
+.card-footer .btn-primary { width: auto; min-width: 92px; }
 
 /* ============================================================
    Form error — inline banner inside the card.

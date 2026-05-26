@@ -20,6 +20,16 @@ from database.db_config import get_connection
 app = Flask(__name__, static_folder='ui_ux', static_url_path='')
 CORS(app)  # Allow cross-origin requests from any frontend
 
+
+@app.after_request
+def _no_cache_static(resp):
+    """Dev: stop the browser serving stale JS/CSS/HTML during rapid iteration.
+    Without this an edited app.js can keep running from cache, so new event
+    listeners never attach (button shows but does nothing)."""
+    if request.path == '/' or request.path.endswith(('.js', '.css', '.html')):
+        resp.headers['Cache-Control'] = 'no-store, max-age=0'
+    return resp
+
 # Set the default database target (usually 'local' for dev, 'aws' for production)
 DEFAULT_DB_TARGET = os.getenv("DATABASE_TARGET", "local")
 
