@@ -182,7 +182,25 @@
         <section class="form-section">
           <div class="form-label-row">
             <div class="form-label">Wind</div>
-            <button type="button" class="btn-get-wind" id="btnGetWind">
+            <div class="coord-switcher" id="windModeSwitch">
+              <button type="button" class="switcher-segment active" data-windmode="single">Single</button>
+              <button type="button" class="switcher-segment" data-windmode="series">Series</button>
+            </div>
+          </div>
+
+          <!-- Single fixed wind -->
+          <div id="windSingle">
+            <div class="form-row">
+              <label class="field">
+                <span>Speed (kts)</span>
+                <input type="number" id="inpWindSpeed" value="15" min="0" max="200">
+              </label>
+              <label class="field">
+                <span>Direction (°)</span>
+                <input type="number" id="inpWindDir" value="180" min="0" max="359">
+              </label>
+            </div>
+            <button type="button" class="btn-get-wind" id="btnGetWind" style="margin-top:8px">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/>
                 <path d="M9.6 4.6A2 2 0 1 1 11 8H2"/>
@@ -191,15 +209,19 @@
               Get Wind
             </button>
           </div>
-          <div class="form-row">
-            <label class="field">
-              <span>Speed (kts)</span>
-              <input type="number" id="inpWindSpeed" value="15" min="0" max="200">
-            </label>
-            <label class="field">
-              <span>Direction (°)</span>
-              <input type="number" id="inpWindDir" value="180" min="0" max="359">
-            </label>
+
+          <!-- Time-series wind (varies through the drift, like Peter's Excel).
+               The editor lives in a roomy modal (#windCardWrap) — this is just
+               the opener + a summary of how many points are loaded. -->
+          <div id="windSeries" class="hidden">
+            <button type="button" class="wind-series-open" id="btnOpenWindModal">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/>
+              </svg>
+              <span>Edit wind data</span>
+              <span class="wind-series-count" id="windSeriesCount">empty</span>
+            </button>
+            <div class="field-hint">Direction = where the wind is coming <b>from</b>. Each drift step uses the nearest time's wind.</div>
           </div>
         </section>
 
@@ -587,6 +609,55 @@
         </div>
       </div>
     </div>
-  <script src="app.js"></script>
+  </div>
+
+  <!-- Wind series editor — spacious modal for the dynamic (time-series) wind.
+       Paste imports into a preview, adjust column roles, edit rows inline,
+       then Save to apply. Cancel/close discards changes. -->
+  <div class="card-wrap hidden" id="windCardWrap">
+    <div class="card-backdrop" data-windclose></div>
+    <div class="card card--wide" role="dialog" aria-labelledby="windCardTitle">
+      <div class="card-header">
+        <h2 class="card-title" id="windCardTitle">Wind <span>Data</span></h2>
+        <button class="card-close" data-windclose aria-label="Close">×</button>
+      </div>
+
+      <section class="form-section">
+        <div class="form-label">Paste from Excel or CSV</div>
+        <textarea id="windImportText" rows="3"
+          placeholder="Paste rows — any column order:&#10;2026-02-14 06:00   67.5   17.98&#10;0700   NE   15"></textarea>
+        <div class="wind-import-row">
+          <span class="wind-import-label">Speed unit</span>
+          <div class="unit-toggle" id="windUnitToggle" role="group" aria-label="Speed unit">
+            <button type="button" class="unit-seg active" data-unit="kt">kt</button>
+            <button type="button" class="unit-seg" data-unit="kmh">km/h</button>
+            <button type="button" class="unit-seg" data-unit="mph">mph</button>
+          </div>
+        </div>
+        <div id="windPreview" class="wind-preview hidden"></div>
+        <button type="button" class="btn-outline hidden" id="btnParseWind">Add to table ↓</button>
+        <div class="form-error hidden" id="windImportError" role="alert"></div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-label-row">
+          <div class="form-label">Wind points</div>
+          <button type="button" class="wind-clear-link" id="btnClearWind">Clear all</button>
+        </div>
+        <div class="wind-table-head">
+          <span>Time</span><span>Dir °</span><span>Speed kt</span><span></span>
+        </div>
+        <div id="windRows" class="wind-rows-scroll"></div>
+        <button type="button" class="btn-outline wind-addrow" id="btnAddWindRow">+ Add row</button>
+      </section>
+
+      <div class="card-footer">
+        <button type="button" class="btn-outline" data-windclose>Cancel</button>
+        <button type="button" class="btn-primary" id="btnSaveWind">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=wind-modal"></script>
 </body>
 </html>
