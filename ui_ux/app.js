@@ -2131,7 +2131,10 @@ setDefaultUncertainTimes();
 // currentDecimalLat/Lon stay the single source of truth.
 const latFields = document.getElementById('latFields');
 const lonFields = document.getElementById('lonFields');
-const switcherSegments = document.querySelectorAll('.switcher-segment');
+// Scope to the coordinate switcher only — the wind Single/Series toggle reuses
+// the same .switcher-segment class, so an unscoped selector would attach the
+// format handler to it and force the coords to DMS (dataset.format = undefined).
+const switcherSegments = document.querySelectorAll('#coordSwitcher .switcher-segment');
 
 let currentFormat = 'deg';      // 'deg', 'dm', or 'dms'
 let currentDecimalLat = -36.8;
