@@ -23,6 +23,9 @@ def generate_expanding_circle(
         List of Coordinates representing the expanding circle pattern.
     """
     radian = math.pi / 180
+    # VBA works in a south-positive latitude frame (negated when writing GPX).
+    # Flip the datum positive, then negate the output below.
+    datum = Coordinate(-datum.lat, datum.lon)
 
     sw = sweep_width_m / METRES_PER_NAUTICAL_MILE
     rad = max(search_width, track_length / 2)
@@ -38,4 +41,5 @@ def generate_expanding_circle(
             y = math.cos(b * radian) * d
             positions.append(Coordinate(datum.lat + y, datum.lon + x))
 
-    return positions
+    # Back to signed (north-negative) latitude.
+    return [Coordinate(-p.lat, p.lon) for p in positions]

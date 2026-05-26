@@ -65,7 +65,7 @@ def _pat_prep_line(
     radian_th2 = th2 * radian
     if int(th2 / 180) == th2 / 180:
         step_x = 0.0
-        step_y = sw_deg if th2 != 180 else -sw_deg
+        step_y = sw_deg if th2 == 180 else -sw_deg   # VBA: th=180 -> +, else ->
     else:
         g2 = -math.cos(radian_th2) / math.sin(radian_th2)
         step_x = math.sqrt((sw_deg ** 2) / (1 + g2 ** 2))
@@ -106,8 +106,11 @@ def generate_creeping_line(
     Returns:
         List of Coordinates representing the creeping line pattern.
     """
+    # VBA works in a south-positive latitude frame (negated when writing GPX).
+    # Run the maths with the datum flipped positive, then negate the output.
+    vba_datum = Coordinate(-datum.lat, datum.lon)
     end1, end2, lon_step, lat_step, leg_count = _pat_prep_line(
-        datum, search_direction_deg, sweep_width_nm, search_width_nm, track_length_nm
+        vba_datum, search_direction_deg, sweep_width_nm, search_width_nm, track_length_nm
     )
 
     positions: list[Coordinate] = []
@@ -129,4 +132,5 @@ def generate_creeping_line(
         lon_b = base2.lon + (b * lon_step)
         positions.append(Coordinate(lat_b, lon_b))
 
-    return positions
+    # Back to signed (north-negative) latitude.
+    return [Coordinate(-p.lat, p.lon) for p in positions]

@@ -85,7 +85,7 @@ def _pat_prep_square(
         radian_perp = th_perp * radian
         if int(th_perp / 180) == th_perp / 180:
             sx = 0.0
-            sy = l if th_perp != 180 else -l
+            sy = l if th_perp == 180 else -l   # VBA: th=180 -> l, else -> -l
         else:
             gp = -math.cos(radian_perp) / math.sin(radian_perp)
             sx = math.sqrt((l ** 2) / (1 + gp ** 2))
@@ -128,8 +128,14 @@ def generate_expanding_square(
     Returns:
         List of Coordinates representing the expanding square pattern.
     """
+    # VBA does all pattern maths in a south-positive latitude frame (Setup
+    # stores +lat, the GPX writer negates). Run the maths in that frame by
+    # flipping the datum's latitude positive, then negate every output point's
+    # latitude. This keeps rotation handedness correct for ALL directions
+    # (negating offsets alone mirrors diagonal patterns).
+    vba_datum = Coordinate(-datum.lat, datum.lon)
     end1, end2, end3, end4, lon_step_p, lat_step_p, lon_step_q, lat_step_q, leg_count = \
-        _pat_prep_square(datum, search_direction_deg, sweep_width_nm, search_width_nm, track_length_nm)
+        _pat_prep_square(vba_datum, search_direction_deg, sweep_width_nm, search_width_nm, track_length_nm)
 
     positions: list[Coordinate] = []
     b = 0
@@ -163,4 +169,5 @@ def generate_expanding_square(
 
         c = -c
 
-    return positions
+    # Back to signed (north-negative) latitude for the rest of the app.
+    return [Coordinate(-p.lat, p.lon) for p in positions]

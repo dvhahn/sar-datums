@@ -23,6 +23,9 @@ def generate_sector_search(
         30-degree mode returns a list with three inner lists.
     """
     radian = math.pi / 180
+    # VBA works in a south-positive latitude frame (negated when writing GPX).
+    # Flip the datum positive here and negate the output below.
+    datum = Coordinate(-datum.lat, datum.lon)
     conv = math.cos(radian * datum.lat)
 
     num_sectors = 3 if sector_angle_deg == 30 else 1
@@ -53,4 +56,5 @@ def generate_sector_search(
         sector.append(first_point)
         sectors.append(sector)
 
-    return sectors
+    # Back to signed (north-negative) latitude.
+    return [[Coordinate(-p.lat, p.lon) for p in sec] for sec in sectors]
