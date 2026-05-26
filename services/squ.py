@@ -26,25 +26,34 @@ def _pat_prep_square(
     conv = math.cos(radian * datum.lat)
     sw = sweep_width_nm
 
-    # Adjust track length and width for expanding square (typ=2 branch)
-    if search_width_nm * 2 > track_length_nm:
-        track_length_nm = search_width_nm * 2
-        search_width_nm = track_length_nm / 2  # original track_length / 2
-    track_length_nm = (track_length_nm - (search_width_nm * 2)) + sw
+    # VBA's Wth (rwA+8) is a HALF-width (each side of centre); the UI sends the
+    # TOTAL box width, so halve it. track_length_nm is the full track length.
+    half_width = search_width_nm / 2
+    orig_track_length = track_length_nm
+
+    # Expanding-square sizing (VBA PatPrep typ=2). If the box is wider than it
+    # is long, swap so the longer side drives the spiral length. The ORIGINAL
+    # track length must be read here — overwriting it first (the old bug)
+    # collapsed every rectangle back into a square.
+    tk = track_length_nm
+    if half_width * 2 > tk:
+        tk = half_width * 2
+        half_width = orig_track_length / 2
+    tk = (tk - (half_width * 2)) + sw
 
     th = search_direction_deg
     sin_th = math.sin(th * radian)
 
     if sin_th == 0:
-        w = 1 if th != 180 else -1
+        w = 1 if th == 180 else -1   # VBA: th=180 -> 1, else (incl. 0) -> -1
         x = 0.0
-        y = w * track_length_nm / 120
+        y = w * tk / 120
         a_val = 0.0
         b_val = w * sw / 60
     else:
         g = -math.cos(th * radian) / sin_th
         x = math.copysign(
-            math.sqrt(((track_length_nm / 120) ** 2) / (1 + g ** 2)),
+            math.sqrt(((tk / 120) ** 2) / (1 + g ** 2)),
             sin_th
         )
         a_val = math.copysign(
@@ -94,7 +103,7 @@ def _pat_prep_square(
     # end4 is the perpendicular counterpart to end3 (rwA+16/17 shifted)
     end4 = Coordinate(end2.lat, end2.lon)
 
-    leg_count = int(search_width_nm / sweep_width_nm)
+    leg_count = int(half_width / sweep_width_nm)
 
     return end1, end2, end3, end4, lon_step_primary, lat_step_primary, lon_step_perp, lat_step_perp, leg_count
 
@@ -135,8 +144,11 @@ def generate_expanding_square(
             if b > 0:
                 b += 1
 
-        # First point of leg — primary axis endpoints + primary step
-        base1 = end1 if c == 1 else end2
+        # First point of leg — primary axis endpoints + primary step.
+        # VBA Squ() reads Cells(rwA+13+c): c=1 -> Lat2 (end2), c=-1 -> Lat1
+        # (end1). Selecting the wrong one flips alternate legs into diagonals,
+        # which renders the square as a diamond.
+        base1 = end2 if c == 1 else end1
         positions.append(Coordinate(
             base1.lat + (b * lat_step_p),
             base1.lon + (b * lon_step_p)

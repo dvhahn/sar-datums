@@ -24,12 +24,17 @@ def _pat_prep_line(
     conv = math.cos(radian * datum.lat)
     sw = sweep_width_nm
 
-    th = search_direction_deg
+    # Peter's feedback: the creeping line must rotate 90 deg from the entered
+    # (drift) bearing so the pattern's centre spine runs ALONG the LKP->datum
+    # line — legs sweep across the drift track while the pattern creeps along
+    # it. The entered direction is therefore the creep/advance axis; legs run
+    # perpendicular to it.
+    th = search_direction_deg + 90.0
     sin_th = math.sin(th * radian)
 
     if sin_th == 0:
         # Track runs exactly N or S
-        w = 1 if th != 180 else -1
+        w = 1 if th == 180 else -1   # VBA: th=180 -> 1, else (incl. 0) -> -1
         x = 0.0
         y = w * track_length_nm / 120
         a = 0.0
@@ -72,7 +77,11 @@ def _pat_prep_line(
     lon_step = (step_x / conv) * sign
     lat_step = step_y * sign
 
-    leg_count = int(search_width_nm / sweep_width_nm)
+    # search_width_nm is the TOTAL box width the user enters. Legs are laid at
+    # offsets -leg_count..+leg_count (each leg_step = one sweep width), so the
+    # span is 2*leg_count sweeps. Halving here keeps the total span == the width
+    # entered. (VBA stored a half-width in Wth; its form did this ÷2 for it.)
+    leg_count = int((search_width_nm / 2) / sweep_width_nm)
 
     return end1, end2, lon_step, lat_step, leg_count
 
