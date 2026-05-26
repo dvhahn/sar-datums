@@ -216,8 +216,20 @@
               <span>Time</span><span>Dir °</span><span>Speed kt</span><span></span>
             </div>
             <div id="windRows"></div>
-            <button type="button" class="btn-outline" id="btnAddWindRow">+ Add row</button>
-            <div class="field-hint">Each step uses the nearest time's wind. Time accepts HHMM or full date.</div>
+            <div class="wind-actions">
+              <button type="button" class="btn-outline" id="btnAddWindRow">+ Add row</button>
+              <button type="button" class="btn-outline" id="btnImportWind">Import</button>
+              <button type="button" class="btn-outline" id="btnClearWind">Clear</button>
+            </div>
+
+            <div id="windImportPane" class="hidden">
+              <textarea id="windImportText" rows="5"
+                placeholder="Paste from Excel or CSV — Time, Direction, Speed (one row per line):&#10;2026-02-14 06:00, 180, 4&#10;2026-02-14 07:00, NE, 6"></textarea>
+              <button type="button" class="btn-primary" id="btnParseWind">Parse &amp; fill table</button>
+              <div class="form-error hidden" id="windImportError" role="alert"></div>
+            </div>
+
+            <div class="field-hint">Direction = where the wind is coming <b>from</b>. Each drift step uses the nearest time's wind. Time accepts HHMM or full date.</div>
           </div>
         </section>
 

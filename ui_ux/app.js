@@ -2164,6 +2164,52 @@ function addWindRow(time = '', dir = '', spd = '') {
 }
 btnAddWindRow.addEventListener('click', () => addWindRow());
 
+// ── Wind import (paste from Excel/CSV) + clear ───────────────────────────
+const btnImportWind = document.getElementById('btnImportWind');
+const btnClearWind = document.getElementById('btnClearWind');
+const windImportPane = document.getElementById('windImportPane');
+const windImportText = document.getElementById('windImportText');
+const btnParseWind = document.getElementById('btnParseWind');
+const windImportError = document.getElementById('windImportError');
+
+const COMPASS_DEG = {
+  N: 0, NNE: 22.5, NE: 45, ENE: 67.5, E: 90, ESE: 112.5, SE: 135, SSE: 157.5,
+  S: 180, SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5,
+};
+
+btnImportWind.addEventListener('click', () => windImportPane.classList.toggle('hidden'));
+btnClearWind.addEventListener('click', () => { windRows.innerHTML = ''; });
+
+// Parse pasted rows ("time, dir, speed" — tab or comma separated, like an
+// Excel copy or CSV). Header/blank lines and 4th+ columns are ignored;
+// compass points (NE, SSW…) convert to degrees. Replaces the table.
+btnParseWind.addEventListener('click', () => {
+  windImportError.classList.add('hidden');
+  const lines = windImportText.value.split(/\r?\n/);
+  const parsed = [];
+  for (const line of lines) {
+    const parts = line.split(/[,\t]/).map(s => s.trim());
+    if (parts.length < 3) continue;
+    const [traw, draw, sraw] = parts;
+    if (!parseDatetimeEntry(traw)) continue;          // skip header/garbage
+    const dir = (draw.toUpperCase() in COMPASS_DEG)
+      ? COMPASS_DEG[draw.toUpperCase()]
+      : parseFloat(draw);
+    const spd = parseFloat(sraw);
+    if (isNaN(dir) || isNaN(spd)) continue;
+    parsed.push([traw, dir, spd]);
+  }
+  if (parsed.length === 0) {
+    windImportError.textContent = 'No valid rows found. Expected: time, direction, speed (one per line).';
+    windImportError.classList.remove('hidden');
+    return;
+  }
+  windRows.innerHTML = '';
+  parsed.forEach(([t, d, s]) => addWindRow(t, d, s));
+  windImportPane.classList.add('hidden');
+  windImportText.value = '';
+});
+
 // Collect series rows → [{time, direction_deg, speed}]. Reuses the datetime
 // parser so HHMM / full date both work. Skips incomplete rows.
 function collectWindSeries() {
