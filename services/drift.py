@@ -35,6 +35,22 @@ def calculate_leeway(wind: Wind, search_object: SearchObject) -> CurrentVector:
     return CurrentVector(vx, vy)
 
 
+def pick_wind(current_time: datetime, wind_series, fallback: Wind) -> Wind:
+    """Nearest-in-time wind from a time series, mirroring VBA VADatums.
+
+    `wind_series` is a list of (datetime, direction_deg, speed_kt). The row with
+    the smallest |time - current_time| wins (same rule as Peter's Excel, which
+    scans Datums!A22.. for the closest timestamp). If the series is empty/None,
+    the fixed `fallback` Wind is used so single-wind mode is unchanged.
+    """
+    if not wind_series:
+        return fallback
+    _, direction, speed = min(
+        wind_series, key=lambda w: abs((w[0] - current_time).total_seconds())
+    )
+    return Wind(speed=speed, direction_deg=direction % 360)
+
+
 # Rotate a vector by a given angle in degrees (positive = clockwise).
 def rotate_vector(vec: CurrentVector, angle_deg: float) -> CurrentVector:
     rad = math.radians(angle_deg)
@@ -353,6 +369,7 @@ def calculate_drift(
     target="local",
     wind_divergence=False,
     divergence_angle_override=None,
+    wind_series=None,
 ):
     """Walk a drifting object forward (or backward) in time.
 
@@ -376,13 +393,15 @@ def calculate_drift(
     """
     global _last_divergence_tracks
 
-    base_leeway = calculate_leeway(wind, search_object)
-    leeway_variants = [("normal", base_leeway)]
+    # Divergence variants are rotation *angles* (not pre-baked leeway vectors)
+    # so they work whether the wind is fixed or a per-step time series — the
+    # leeway is recomputed inside the loop and rotated by this angle.
+    variants = [("normal", 0.0)]
     if wind_divergence:
         angle = divergence_angle_override if divergence_angle_override is not None else search_object.divergence_angle
         if angle != 0:
-            leeway_variants.append(("pos_div", rotate_vector(base_leeway, angle)))
-            leeway_variants.append(("neg_div", rotate_vector(base_leeway, -angle)))
+            variants.append(("pos_div", angle))
+            variants.append(("neg_div", -angle))
 
     sign = -1 if is_reverse else 1
     multiplier = float(sign)
@@ -396,7 +415,7 @@ def calculate_drift(
 
         all_tracks = {}
         all_timestamps = {}
-        for name, leeway in leeway_variants:
+        for name, rot in variants:
             positions = [start_position]
             timestamps = [start_time]
             current_position = start_position
@@ -441,6 +460,12 @@ def calculate_drift(
                 tidal_current = get_tidal_current(
                     cur, current_position.lat, current_position.lon, current_time, config
                 )
+                # Per-step wind: pick the nearest time-series sample (or the
+                # fixed wind), compute leeway, then rotate for divergence.
+                wind_now = pick_wind(current_time, wind_series, wind)
+                leeway = calculate_leeway(wind_now, search_object)
+                if rot != 0.0:
+                    leeway = rotate_vector(leeway, rot)
                 current_position = apply_drift_step(
                     current_position, tidal_current, leeway, actual_seconds, multiplier
                 )

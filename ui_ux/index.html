@@ -182,7 +182,25 @@
         <section class="form-section">
           <div class="form-label-row">
             <div class="form-label">Wind</div>
-            <button type="button" class="btn-get-wind" id="btnGetWind">
+            <div class="coord-switcher" id="windModeSwitch">
+              <button type="button" class="switcher-segment active" data-windmode="single">Single</button>
+              <button type="button" class="switcher-segment" data-windmode="series">Series</button>
+            </div>
+          </div>
+
+          <!-- Single fixed wind -->
+          <div id="windSingle">
+            <div class="form-row">
+              <label class="field">
+                <span>Speed (kts)</span>
+                <input type="number" id="inpWindSpeed" value="15" min="0" max="200">
+              </label>
+              <label class="field">
+                <span>Direction (°)</span>
+                <input type="number" id="inpWindDir" value="180" min="0" max="359">
+              </label>
+            </div>
+            <button type="button" class="btn-get-wind" id="btnGetWind" style="margin-top:8px">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/>
                 <path d="M9.6 4.6A2 2 0 1 1 11 8H2"/>
@@ -191,15 +209,15 @@
               Get Wind
             </button>
           </div>
-          <div class="form-row">
-            <label class="field">
-              <span>Speed (kts)</span>
-              <input type="number" id="inpWindSpeed" value="15" min="0" max="200">
-            </label>
-            <label class="field">
-              <span>Direction (°)</span>
-              <input type="number" id="inpWindDir" value="180" min="0" max="359">
-            </label>
+
+          <!-- Time-series wind (varies through the drift, like Peter's Excel) -->
+          <div id="windSeries" class="hidden">
+            <div class="wind-table-head">
+              <span>Time</span><span>Dir °</span><span>Speed kt</span><span></span>
+            </div>
+            <div id="windRows"></div>
+            <button type="button" class="btn-outline" id="btnAddWindRow">+ Add row</button>
+            <div class="field-hint">Each step uses the nearest time's wind. Time accepts HHMM or full date.</div>
           </div>
         </section>
 

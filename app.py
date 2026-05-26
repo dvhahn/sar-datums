@@ -128,7 +128,23 @@ def drift():
         start_pos = Coordinate(lat=data['lat'], lon=data['lon'])
         start_time = datetime.fromisoformat(data['start_time'])
         end_time = datetime.fromisoformat(data['end_time'])
-        wind = Wind(speed=data['wind_speed'], direction_deg=data['wind_direction'])
+
+        # Optional time-series wind: [{time, direction_deg, speed}, ...].
+        # When present it overrides the single wind on every drift step
+        # (mirrors Peter's Excel "Use WindData" mode).
+        wind_series_raw = data.get('wind_series')
+        wind_series = None
+        if wind_series_raw:
+            wind_series = [
+                (datetime.fromisoformat(w['time']),
+                 float(w['direction_deg']), float(w['speed']))
+                for w in wind_series_raw
+            ]
+        if wind_series:
+            wind = Wind(speed=0, direction_deg=0)  # fallback; series drives each step
+        else:
+            wind = Wind(speed=data['wind_speed'], direction_deg=data['wind_direction'])
+
         search_object = SEARCH_OBJECTS.get(data.get('object_id', 1))
         is_reverse = data.get('is_reverse', False)
         multiple_tracks = data.get('multiple_tracks', False)
@@ -170,6 +186,7 @@ def drift():
         target=db_target,
         wind_divergence=wind_divergence,
         divergence_angle_override=divergence_angle,
+        wind_series=wind_series,
     )
 
     satellites = []
@@ -180,6 +197,7 @@ def drift():
                 sat_start, start_time, end_time, wind, search_object,
                 is_reverse=is_reverse,
                 target=db_target,
+                wind_series=wind_series,
             )
             satellites.append([
                 {"lat": round(p.lat, 6), "lon": round(p.lon, 6)}

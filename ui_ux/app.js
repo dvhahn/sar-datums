@@ -383,24 +383,31 @@ btnChangeObject.addEventListener('click', () => {
 
 // Helper to send a drift request and return data
 async function fetchDrift(startTime, endTime) {
+  const payload = {
+    lat: currentDecimalLat,
+    lon: currentDecimalLon,
+    start_time: startTime,
+    end_time: endTime,
+    object_id: parseInt(selectedObjectIdInput.value, 10),
+    is_reverse: inpReverse.checked,
+    multiple_tracks: inpMultipleTracks.checked,
+    radius_nm: parseFloat(inpRadius.value),
+    wind_divergence: chkDivergence.checked,
+    // No divergence_angle override — backend uses the selected object's
+    // own leeway divergence angle (varies per object, e.g. PIW 30°, kayak 15°).
+  };
+  // Time-series wind overrides the single wind per drift step (Peter's
+  // "Use WindData" mode); otherwise send the fixed single wind.
+  if (windMode === 'series') {
+    payload.wind_series = collectWindSeries();
+  } else {
+    payload.wind_speed = parseFloat(inpWindSpeed.value);
+    payload.wind_direction = parseFloat(inpWindDir.value);
+  }
   const res = await fetch('/api/drift', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      lat: currentDecimalLat,
-      lon: currentDecimalLon,
-      start_time: startTime,
-      end_time: endTime,
-      wind_speed: parseFloat(inpWindSpeed.value),
-      wind_direction: parseFloat(inpWindDir.value),
-      object_id: parseInt(selectedObjectIdInput.value, 10),
-      is_reverse: inpReverse.checked,
-      multiple_tracks: inpMultipleTracks.checked,
-      radius_nm: parseFloat(inpRadius.value),
-      wind_divergence: chkDivergence.checked,
-      // No divergence_angle override — backend uses the selected object's
-      // own leeway divergence angle (varies per object, e.g. PIW 30°, kayak 15°).
-    }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
   return res.json();
@@ -835,7 +842,11 @@ function validateDriftForm() {
       return `Times must fall between ${f(dataRange.min)} and ${f(dataRange.max)} — tidal data isn't available outside this range.`;
     }
   }
-  if (!inpWindSpeed.value || inpWindDir.value === '') return 'Enter wind speed and direction.';
+  if (windMode === 'series') {
+    if (collectWindSeries().length === 0) return 'Add at least one wind row (time, direction, speed).';
+  } else if (!inpWindSpeed.value || inpWindDir.value === '') {
+    return 'Enter wind speed and direction.';
+  }
   if (!selectedObjectIdInput.value)    return 'Select an object type before calculating.';
   return null;
 }
@@ -2118,3 +2129,53 @@ switcherSegments.forEach(btn => {
 
 // Initial display
 setFormat('deg');
+
+// ── Wind mode: single fixed vs time-series ───────────────────────────────
+// Time-series mirrors Peter's "Use WindData": the drift loop picks the
+// nearest-time wind on each step instead of one fixed value.
+let windMode = 'single';
+const windModeSwitch = document.getElementById('windModeSwitch');
+const windSingle = document.getElementById('windSingle');
+const windSeriesPane = document.getElementById('windSeries');
+const windRows = document.getElementById('windRows');
+const btnAddWindRow = document.getElementById('btnAddWindRow');
+
+windModeSwitch.querySelectorAll('.switcher-segment').forEach(btn => {
+  btn.addEventListener('click', () => {
+    windMode = btn.dataset.windmode;
+    windModeSwitch.querySelectorAll('.switcher-segment').forEach(b =>
+      b.classList.toggle('active', b.dataset.windmode === windMode));
+    windSingle.classList.toggle('hidden', windMode !== 'single');
+    windSeriesPane.classList.toggle('hidden', windMode !== 'series');
+    if (windMode === 'series' && windRows.children.length === 0) addWindRow();
+  });
+});
+
+function addWindRow(time = '', dir = '', spd = '') {
+  const row = document.createElement('div');
+  row.className = 'wind-row';
+  row.innerHTML =
+    `<input type="text"   class="wind-time" placeholder="HHMM" value="${time}">` +
+    `<input type="number" class="wind-dir"  placeholder="°"  min="0" max="359" value="${dir}">` +
+    `<input type="number" class="wind-spd"  placeholder="kt" min="0" value="${spd}">` +
+    `<button type="button" class="wind-del" aria-label="Remove row">✕</button>`;
+  row.querySelector('.wind-del').addEventListener('click', () => row.remove());
+  windRows.appendChild(row);
+}
+btnAddWindRow.addEventListener('click', () => addWindRow());
+
+// Collect series rows → [{time, direction_deg, speed}]. Reuses the datetime
+// parser so HHMM / full date both work. Skips incomplete rows.
+function collectWindSeries() {
+  const out = [];
+  windRows.querySelectorAll('.wind-row').forEach(r => {
+    const traw = r.querySelector('.wind-time').value.trim();
+    const dir = parseFloat(r.querySelector('.wind-dir').value);
+    const spd = parseFloat(r.querySelector('.wind-spd').value);
+    if (!traw || isNaN(dir) || isNaN(spd)) return;
+    const dt = parseDatetimeEntry(traw);
+    if (!dt) return;
+    out.push({ time: toLocalDatetime(dt) + ':00', direction_deg: dir, speed: spd });
+  });
+  return out;
+}

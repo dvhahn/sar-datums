@@ -1180,6 +1180,74 @@ body {
 }
 
 /* ============================================================
+   Time-series wind table — Time / Dir / Speed rows + delete.
+   ============================================================ */
+.wind-table-head,
+.wind-row {
+  display: grid;
+  grid-template-columns: 1fr 0.65fr 0.65fr 28px;
+  gap: 6px;
+  align-items: center;
+}
+.wind-table-head {
+  margin-bottom: 4px;
+  padding: 0 4px;
+}
+.wind-table-head span {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.wind-row {
+  margin-bottom: 6px;
+}
+.wind-row input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-hover);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: center;
+}
+.wind-row input:focus {
+  background: var(--color-bg);
+  border-color: var(--color-accent);
+  outline: none;
+}
+.wind-row input::-webkit-outer-spin-button,
+.wind-row input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.wind-row input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.wind-del {
+  border: none;
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  border-radius: 50%;
+  transition: color 0.15s;
+}
+.wind-del:hover {
+  color: #ff453a;
+}
+#btnAddWindRow {
+  width: 100%;
+  margin-top: 2px;
+}
+
+/* ============================================================
    Form error — inline banner inside the card.
    ============================================================ */
 .form-error {
