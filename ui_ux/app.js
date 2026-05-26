@@ -2164,6 +2164,16 @@ function addWindRow(time = '', dir = '', spd = '') {
 }
 btnAddWindRow.addEventListener('click', () => addWindRow());
 
+// Stop the mouse wheel from silently changing a focused number input
+// (browser default). Blur on wheel so the page still scrolls but the value
+// can't be nudged by accident. Applies to every number input on the page.
+document.addEventListener('wheel', (e) => {
+  const el = document.activeElement;
+  if (el && el.tagName === 'INPUT' && el.type === 'number' && el === e.target) {
+    el.blur();
+  }
+}, { passive: true });
+
 // ── Wind series modal (open / save / cancel) ─────────────────────────────
 // The table lives in this modal. Edits are "live" in the DOM, so to honour
 // "only Save applies" we snapshot row values on open and restore them on
