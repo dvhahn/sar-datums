@@ -30,8 +30,9 @@ def _no_cache_static(resp):
         resp.headers['Cache-Control'] = 'no-store, max-age=0'
     return resp
 
+
 # Set the default database target (usually 'local' for dev, 'aws' for production)
-DEFAULT_DB_TARGET = os.getenv("DATABASE_TARGET", "local")
+DEFAULT_DB_TARGET = "aws" if os.getenv("AWS_DB_HOST") else os.getenv("DATABASE_TARGET", "local")
 
 # Hardcoded fallback (Peter's Excel — Setup sheet column N-O). Used if the
 # object_types table isn't populated yet (e.g. fresh DB before
@@ -81,8 +82,8 @@ def _calculate_distance_nm(start: Coordinate, end: Coordinate) -> float:
     dlon = lon2 - lon1
 
     a = (
-        math.sin(dlat / 2) ** 2
-        + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+            math.sin(dlat / 2) ** 2
+            + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
     )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return (6371000 * c) / METRES_PER_NAUTICAL_MILE
@@ -114,8 +115,8 @@ def _calculate_bearing(start: Coordinate, end: Coordinate) -> float:
 
     x = math.sin(dlon) * math.cos(lat2)
     y = (
-        math.cos(lat1) * math.sin(lat2)
-        - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+            math.cos(lat1) * math.sin(lat2)
+            - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
     )
     return (math.degrees(math.atan2(x, y)) + 360) % 360
 
@@ -285,7 +286,7 @@ def drift():
         "summary": {
             "object_type": search_object.name,
             "database_used": db_target,
-            "is_reverse": is_reverse, 
+            "is_reverse": is_reverse,
             "duration_hours": round(duration_hours, 2),
             "drift_distance_nm": round(drift_distance_nm, 3),
             "drift_speed_kts": round(drift_speed_kts, 3),
@@ -293,6 +294,7 @@ def drift():
             "leeway_factor": round(leeway_factor, 3),
         }
     })
+
 
 @app.route('/api/gpx')
 def gpx():
@@ -342,7 +344,7 @@ def currents():
     except ValueError as e:
         return jsonify({"error": f"Invalid params: {str(e)}"}), 400
 
-    arrows = get_currents_grid(sample_time, lat_min, lat_max, lon_min, lon_max)
+    arrows = get_currents_grid(sample_time, lat_min, lat_max, lon_min, lon_max, target=DEFAULT_DB_TARGET)
     return jsonify({"arrows": arrows})
 
 
@@ -585,13 +587,14 @@ def wind():
         return jsonify({"error": f"Failed to fetch wind data: {str(e)}"}), 500
 
 
+'''
 if __name__ == '__main__':
     # host='0.0.0.0' makes it accessible to the internet
     # port=5000 is the standard Flask port
     app.run(host='0.0.0.0', port=5000, debug=False)
-
 '''
+
 if __name__ == '__main__':
     # Use debug=True for local development to get automatic restarts
     app.run(host='localhost', port=5000, debug=True)
-'''
+
