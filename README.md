@@ -1,156 +1,107 @@
-# Rescue Backend
+<div align="center">
 
-## Installation
+# SAR Datums
 
-### MacOS
+**A web-based drift-prediction tool for maritime search & rescue planning.**
+
+Replaces a legacy Excel/VBA leeway model with an interactive map, live tidal-current data, and automatic search-pattern generation.
+
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](#)
+[![Flask](https://img.shields.io/badge/Flask-3.0-000000?logo=flask&logoColor=white)](#)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)](#)
+[![PostGIS](https://img.shields.io/badge/PostGIS-enabled-3E7D32)](#)
+[![MapLibre GL](https://img.shields.io/badge/MapLibre_GL-JS-396CB2)](#)
+
+<img src="docs/screenshot.png" alt="SAR Datums drift calculation screen over the Hauraki Gulf" width="720">
+
+</div>
+
+## What it does
+
+Given a **last known position**, a **time window**, **wind conditions**, and the type of object in the water (person, life raft, kayak, oil drum...), SAR Datums predicts where that object has drifted to — combining:
+
+- **Leeway** — direct wind-driven drift, using per-object leeway coefficients (117-entry object catalogue: PIW, life rafts, person-powered craft, debris, etc.)
+- **Tidal currents** — real current-vector data sampled at the predicted position and time
+- **Divergence** — optional left/right divergence tracks for uncertain leeway angle
+
+...and outputs a predicted **datum** (drift track), downloadable as **GPX/KML** for direct import into a GPS or chartplotter, plus an automatically generated **search pattern** (creeping line, expanding square, sector search, or expanding circle) sized by a sweep-width calculator that accounts for visibility, sea state, and searcher fatigue.
+
+The physics/leeway model is validated **against a reference Excel/VBA spreadsheet** already in use by search & rescue volunteers — the app includes an accuracy-comparison endpoint that diffs its predicted track against a reference GPX to confirm the two stay in agreement.
+
+## Features
+
+- 🗺️ Interactive map (MapLibre GL) centred on the Hauraki Gulf, with live tidal-current overlay
+- 📍 Drift prediction from a single datum, or a ring of satellite start points for spread estimation
+- 🌊 Tidal current + tide height data, queried spatially with PostGIS
+- 🧭 Four SAR search pattern generators: creeping line, expanding square, sector search, expanding circle
+- 📐 Sweep-width calculator (object type, visibility, height of eye, wind, sea state, fatigue, asset count)
+- 📤 GPX / KML export, ready for GPS devices and chartplotters
+- ✅ Built-in accuracy check against the original Excel/VBA reference implementation
+- 🌤️ Live wind lookup via the Open-Meteo API
+
+## Tech stack
+
+| Layer | Tech |
+|---|---|
+| Backend | Python, Flask |
+| Database | PostgreSQL + PostGIS (spatial indexing on tidal vectors & locations) |
+| Frontend | Vanilla JS, MapLibre GL JS, Flatpickr |
+| Data | Tidal vectors & heights imported from source spreadsheets; SAR object catalogue (117 entries) |
+
+## Architecture
+
 ```
-cd <project directory>
-python3 -m venv venv
-source venv/bin/activate
+app.py                  Flask routes / API
+domain/model.py         Coordinate, Wind, SearchObject, CurrentVector
+services/
+  drift.py              Leeway + tidal-current drift simulation
+  circ.py, lne.py, sect.py, squ.py, sweep.py    Search-pattern generators
+  gpx.py, kml.py        Track export
+  accuracy.py           Compare predicted track vs. reference GPX
+  wind.py               Open-Meteo wind lookup
+database/
+  db_config.py          Local / AWS connection targets
+  schema.sql            PostGIS schema
+  parse_tidal_data.py, parse_tide_heights.py, import_objects_csv.py   Data importers
+ui_ux/                  Map UI (HTML/CSS/JS)
+```
+
+## Setup
+
+**Requirements:** Python 3.11+, PostgreSQL 18 with PostGIS.
+
+```bash
+git clone https://github.com/dvhahn/sar-datums.git
+cd sar-datums
+python3 -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Windows
-```
-cd <project directory>
-py -3 -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```
+Then set up the database (full step-by-step in [`docs/DATABASE_SETUP.md`](docs/DATABASE_SETUP.md)):
 
-## Database Setup Guide
-This guide explains how to set up the PostgreSQL + PostGIS database locally and import all required tidal data. Follow these steps exactly to ensure your database matches the rest of the team:
-
-### MacOS
-#### 1. Install PostgreSQL 18
-```
-brew install postgresql@18
-```
-Start the PostgreSQL server:
-```
-brew services start postgresql@18
-```
-
-#### 2. Install PostGIS:
-```
-brew install postgis
-```
-
-#### 3. Create "sar_datums" Database:
-```
+```bash
+brew install postgresql@18 postgis
 createdb sar_datums
-```
-Enable PostGIS extension inside the database:
-```
 psql sar_datums -c "CREATE EXTENSION postgis;"
-```
-
-#### 4. Run the Database Schema:
-This will run the schema file to create all required tables:
-```
 psql sar_datums -f database/schema.sql
-```
-
-#### 5. Install Required Python Packages
-This will install dependencies used for parsing Excel files and inserting it into PostgreSQL:
-```
-pip install openpyxl psycopg2-binary
-```
-
-#### 6. Import Tide Heights and Tidal Vector Data
-This will run the tide height and tidal vector importers:
-```
 python database/parse_tide_heights.py <excel_path>
 python database/parse_tidal_data.py <excel_path>
-```
-NOTE: This process may take approximately 40 minutes.
-
-#### 7. Import the SAR Object Catalogue
-Populates `object_types` from `data/objects.csv` (117 entries — leeway coefficients and divergence angles for the object picker / divergence drift):
-```
 python database/import_objects_csv.py data/objects.csv
 ```
 
-#### 8. Create Locations Table + Indexes
-This will create locations table, create a spatial index for faster geospatial lookups, and create an index to speed up tidal vector queries:
-```
-psql -U postgres -d sar_datums -c "CREATE TABLE locations AS SELECT DISTINCT lat, lon, location FROM tidal_vectors;"
-psql -U postgres -d sar_datums -c "CREATE INDEX idx_locations_gist ON locations USING GIST (location);"
-psql -U postgres -d sar_datums -c "CREATE INDEX idx_tidal_vectors_coords ON tidal_vectors (lat, lon, time_step);"
+Run it:
+
+```bash
+python app.py
+# → http://localhost:5000
 ```
 
-#### 9. Set Environment Variables for PostgreSQL Login and Verify Setup
-To verify that everything is working correctly, run:
-```
-$env:DB_USER=postgres
-$env:DB_PASSWORD=your_postgres_password
-python test_drift.py
-```
-If the script runs successfully and produces output without database errors, your setup is complete.
+## My contribution
 
-### Windows
-#### 1. Install PostgreSQL 18
-During installation ensure that you install pgAdmin4 and PostGIS (If available):
-```
-https://www.postgresql.org/download/windows/
-```
-If PostGIS is not included, download it separately from:  
-```
-https://postgis.net/windows_downloads/
-```
+This was built as a 5-person capstone project (COMPSCI 399, University of Auckland) for a real search & rescue use case. My main areas:
 
-#### 2. Add PostgreSQL to PATH
-If you get errors like `psql is not recognized`, add PostgreSQL’s bin folder to your PATH.
-E.g., `C:\Program Files\PostgreSQL\18\bin`.
-
-#### 3. Create "sar_datums" Database:
-```
-createdb -U postgres -h localhost sar_datums
-```
-Enable PostGIS extension inside the database:
-```
-psql -U postgres -d sar_datums -c "CREATE EXTENSION postgis;"
-```
-
-#### 4. Run the Database Schema:
-This will run the schema file to create all required tables:
-```
-psql -U postgres -d sar_datums -f database/schema.sql
-```
-
-#### 5. Install Required Python Packages
-This will install dependencies used for parsing Excel files and inserting it into PostgreSQL:
-```
-pip install openpyxl psycopg2-binary
-```
-
-#### 6. Import Tide Heights and Tidal Vector Data
-This will run the tide height and tidal vector importers:
-```
-python database/parse_tide_heights.py "<excel_path>"
-python database/parse_tidal_data.py "<excel_path>"
-```
-NOTE: This process may take approximately 40 minutes.
-
-#### 7. Import the SAR Object Catalogue
-Populates `object_types` from `data/objects.csv` (117 entries — leeway coefficients and divergence angles for the object picker / divergence drift):
-```
-python database/import_objects_csv.py data/objects.csv
-```
-
-#### 8. Create Locations Table + Indexes
-This will create locations table, create a spatial index for faster geospatial lookups, and create an index to speed up tidal vector queries:
-```
-psql -U postgres -d sar_datums -c "CREATE TABLE locations AS SELECT DISTINCT lat, lon, location FROM tidal_vectors;"
-psql -U postgres -d sar_datums -c "CREATE INDEX idx_locations_gist ON locations USING GIST (location);"
-psql -U postgres -d sar_datums -c "CREATE INDEX idx_tidal_vectors_coords ON tidal_vectors (lat, lon, time_step);"
-```
-
-#### 9. Set Environment Variables for PostgreSQL Login and Verify Setup
-To verify that everything is working correctly, run:
-```
-$env:DB_USER="postgres"
-$env:DB_PASSWORD="your_postgres_password"
-python test_drift.py
-```
-If the script runs successfully and produces output without database errors, your setup is complete.
+- The map-based frontend (`ui_ux/` — drift calculation UI, MapLibre integration, currents overlay)
+- Flask API routes (`app.py`)
+- The core drift/leeway simulation (`services/drift.py`)
+- GPX export and the expanding-square / creeping-line search patterns
+- Database schema work
