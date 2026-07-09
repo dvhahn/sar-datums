@@ -13,7 +13,7 @@ Replaces a legacy Excel/VBA leeway model with an interactive map, live tidal-cur
 [![MapLibre GL](https://img.shields.io/badge/MapLibre_GL-JS-396CB2)](#)
 
 <img src="docs/screenshot.png" alt="SAR Datums drift calculation screen over the Hauraki Gulf" width="720">
-<img src="docs/screenshot-action.png" alt="SAR Datums dark mode, showing a drift track with satellite spread and live tidal current arrows" width="720">
+<img src="docs/screenshot-action.png" alt="SAR Datums generating a parallel-line search pattern around a datum, with live tidal-current arrows over the Hauraki Gulf" width="720">
 
 </div>
 
