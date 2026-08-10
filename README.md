@@ -6,6 +6,8 @@
 
 Replaces a legacy Excel/VBA leeway model with an interactive map, live tidal-current data, and automatic search-pattern generation.
 
+Built for **Auckland Police Search and Rescue**, taken to a real-water field test in June 2026 and demonstrated to Coastguard New Zealand.
+
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](#)
 [![Flask](https://img.shields.io/badge/Flask-3.0-000000?logo=flask&logoColor=white)](#)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql&logoColor=white)](#)
@@ -97,12 +99,17 @@ python app.py
 # → http://localhost:5000
 ```
 
-## My contribution
+## My role
 
-This was built as a 5-person capstone project (COMPSCI 399, University of Auckland) for a real search & rescue use case. My main areas:
+Project manager and lead developer on a 5-person capstone team (COMPSCI 399, University of Auckland), working across the stack. My areas:
 
-- The map-based frontend (`ui_ux/` — drift calculation UI, MapLibre integration, currents overlay)
-- Flask API routes (`app.py`)
-- The core drift/leeway simulation (`services/drift.py`)
-- GPX export and the expanding-square / creeping-line search patterns
-- Database schema work
+- **Leading the team** — work breakdown, requirements sessions with Police stakeholders, and the shift in UI direction toward an interface readable under field conditions
+- **Drift model** (`services/drift.py`) — ported the legacy Excel/VBA leeway model to Python and verified it against the original across the full input range, documenting every divergence before release
+- **Spatial data layer** (`database/`) — the PostGIS schema and the import pipeline for a 52-million-row tidal vector dataset
+- **Flask API** (`app.py`) — the REST routes behind the map
+- **Map frontend** (`ui_ux/`) — drift calculation UI, MapLibre GL integration, tidal-current overlay
+
+Search-pattern generation, the sweep-width calculator, the accuracy-comparison endpoint and the
+GPX/KML exporters were built by teammates.
+
+Deployed on AWS.
